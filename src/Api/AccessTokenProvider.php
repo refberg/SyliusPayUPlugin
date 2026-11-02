@@ -12,6 +12,12 @@ use Symfony\Contracts\Cache\ItemInterface;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface as HttpClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use function hash;
+use function implode;
+use function is_numeric;
+use function is_string;
+use function max;
+use function sprintf;
 
 /**
  * Obtains OAuth access tokens (grant_type=client_credentials) and caches them until shortly before expiry.

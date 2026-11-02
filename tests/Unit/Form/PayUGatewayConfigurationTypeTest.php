@@ -10,6 +10,7 @@ use Symfony\Component\Form\Extension\Validator\ValidatorExtension;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\Forms;
 use Symfony\Component\Validator\Validation;
+use function array_merge;
 
 final class PayUGatewayConfigurationTypeTest extends TestCase
 {

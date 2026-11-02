@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\Order;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator;
 use Sylius\Component\Core\Model\Order;
@@ -44,7 +45,7 @@ final class ExtOrderIdGeneratorTest extends TestCase
 
     public function test_it_requires_persisted_entities(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
 
         (new ExtOrderIdGenerator())->generate($this->payment(null, '1'), $this->paymentRequest(null));
     }

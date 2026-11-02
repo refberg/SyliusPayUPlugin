@@ -27,4 +27,4 @@ return RectorConfig::configure()
         typeDeclarations: true,
         earlyReturn: true,
     )
-    ->withImportNames(importShortClasses: false, removeUnusedImports: true);
+    ->withImportNames(importShortClasses: true, removeUnusedImports: true);

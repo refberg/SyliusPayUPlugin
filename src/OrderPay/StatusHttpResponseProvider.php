@@ -12,6 +12,7 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use function in_array;
 
 /**
  * After returning from PayU: when PayU is still processing the payment, show the thank-you page

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\CommandHandler;
 
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUException;
@@ -20,6 +21,7 @@ use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use Sylius\Component\Payment\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentRequestTransitions;
+use function sprintf;
 
 /**
  * Creates a PayU order and stores the redirect URL in the payment request response data.
@@ -66,7 +68,7 @@ final readonly class CapturePaymentRequestHandler
             $extOrderId = $this->extOrderIdGenerator->generate($payment, $paymentRequest);
             $orderRequest = $this->orderRequestFactory->create($paymentRequest, $payment, $credentials, $extOrderId);
             $created = $this->client->createOrder($credentials, $orderRequest);
-        } catch (PayUException|InvalidConfigurationException|\InvalidArgumentException $exception) {
+        } catch (PayUException|InvalidConfigurationException|InvalidArgumentException $exception) {
             $this->logger->warning('Could not create PayU order.', [
                 'payment_id' => $payment->getId(),
                 'reason' => $exception->getMessage(),

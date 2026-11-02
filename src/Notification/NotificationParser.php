@@ -4,8 +4,15 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\Notification;
 
+use JsonException;
 use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Refberg\SyliusPayUPlugin\Signature\SignatureVerifierInterface;
+use function is_array;
+use function is_int;
+use function is_numeric;
+use function is_string;
+use function json_decode;
+use const JSON_THROW_ON_ERROR;
 
 /**
  * Verifies the signature of a PayU notification and extracts its identifiers.
@@ -28,8 +35,8 @@ final readonly class NotificationParser
         }
 
         try {
-            $data = json_decode($rawBody, true, 32, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
+            $data = json_decode($rawBody, true, 32, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
             return null;
         }
 

@@ -10,6 +10,8 @@ use Refberg\SyliusPayUPlugin\Config\Environment;
 use Refberg\SyliusPayUPlugin\Config\InvalidConfigurationException;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfig;
 use Sylius\Component\Core\Model\PaymentMethod;
+use function print_r;
+use function str_replace;
 
 final class CredentialsResolverTest extends TestCase
 {

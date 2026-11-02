@@ -15,6 +15,7 @@ use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
+use function array_slice;
 
 /**
  * Runs when the customer comes back from PayU (after-pay) or when an API client asks for the status.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\CommandHandler;
 
+use LogicException;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
@@ -40,7 +41,7 @@ trait PaymentRequestHandlerTrait
     {
         $payment = $paymentRequest->getPayment();
         if (!$payment instanceof PaymentInterface) {
-            throw new \LogicException('PayU payment requests require a Sylius Core payment.');
+            throw new LogicException('PayU payment requests require a Sylius Core payment.');
         }
 
         return $payment;

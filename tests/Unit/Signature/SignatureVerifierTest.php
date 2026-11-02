@@ -7,10 +7,16 @@ namespace Tests\Refberg\SyliusPayUPlugin\Unit\Signature;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Signature\SignatureVerifier;
+use function hash;
+use function md5;
+use function sprintf;
+use function str_replace;
+use function strtoupper;
+use function substr;
 
 final class SignatureVerifierTest extends TestCase
 {
-    private const KEY = 'b6ca15b0d1020e8094d9b5f8d163db54';
+    private const KEY = 'unit-test-second-key-0123456789';
 
     private const BODY = '{"order":{"orderId":"LDLW5N7MF4140324GUEST000P01","extOrderId":"000001-1-abcdef012345","status":"COMPLETED"}}';
 

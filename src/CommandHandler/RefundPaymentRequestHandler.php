@@ -17,6 +17,7 @@ use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
+use function sprintf;
 
 /**
  * Requests a full refund of the PayU order that paid the payment.

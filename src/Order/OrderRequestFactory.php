@@ -4,12 +4,25 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\Order;
 
+use InvalidArgumentException;
 use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Sylius\Bundle\CoreBundle\OrderPay\Provider\UrlProviderInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use function array_filter;
+use function filter_var;
+use function in_array;
+use function is_array;
+use function is_string;
+use function parse_url;
+use function sprintf;
+use function strtolower;
+use function substr;
+use const FILTER_VALIDATE_IP;
+use const FILTER_VALIDATE_URL;
+use const PHP_URL_SCHEME;
 
 /**
  * Builds the body of POST /api/v2_1/orders from a Sylius payment.
@@ -44,10 +57,10 @@ final readonly class OrderRequestFactory implements OrderRequestFactoryInterface
         $currency = $payment->getCurrencyCode();
 
         if (!$order instanceof OrderInterface || null === $method->getCode()) {
-            throw new \InvalidArgumentException('Payment has no order or payment method.');
+            throw new InvalidArgumentException('Payment has no order or payment method.');
         }
         if (null === $amount || $amount <= 0 || null === $currency || '' === $currency) {
-            throw new \InvalidArgumentException('Payment amount and currency are required.');
+            throw new InvalidArgumentException('Payment amount and currency are required.');
         }
 
         $description = sprintf('Order %s', (string) $order->getNumber());
@@ -85,14 +98,14 @@ final readonly class OrderRequestFactory implements OrderRequestFactoryInterface
 
         if (null !== $requested) {
             if (!is_string($requested) || !self::isAbsoluteHttpUrl($requested)) {
-                throw new \InvalidArgumentException(sprintf('Payload "%s" must be an absolute http(s) URL.', self::PAYLOAD_CONTINUE_URL));
+                throw new InvalidArgumentException(sprintf('Payload "%s" must be an absolute http(s) URL.', self::PAYLOAD_CONTINUE_URL));
             }
 
             return $requested;
         }
 
         if (!$this->afterPayUrlProvider instanceof UrlProviderInterface) {
-            throw new \InvalidArgumentException(sprintf('Payload "%s" is required when the shop is not installed.', self::PAYLOAD_CONTINUE_URL));
+            throw new InvalidArgumentException(sprintf('Payload "%s" is required when the shop is not installed.', self::PAYLOAD_CONTINUE_URL));
         }
 
         return $this->afterPayUrlProvider->getUrl($paymentRequest, UrlGeneratorInterface::ABSOLUTE_URL);
@@ -102,7 +115,7 @@ final readonly class OrderRequestFactory implements OrderRequestFactoryInterface
     {
         $ip = $order->getCustomerIp();
 
-        return null !== $ip && false !== filter_var($ip, \FILTER_VALIDATE_IP) ? $ip : self::FALLBACK_CUSTOMER_IP;
+        return null !== $ip && false !== filter_var($ip, FILTER_VALIDATE_IP) ? $ip : self::FALLBACK_CUSTOMER_IP;
     }
 
     /**
@@ -135,11 +148,11 @@ final readonly class OrderRequestFactory implements OrderRequestFactoryInterface
 
     private static function isAbsoluteHttpUrl(string $url): bool
     {
-        if (false === filter_var($url, \FILTER_VALIDATE_URL)) {
+        if (false === filter_var($url, FILTER_VALIDATE_URL)) {
             return false;
         }
 
-        $scheme = parse_url($url, \PHP_URL_SCHEME);
+        $scheme = parse_url($url, PHP_URL_SCHEME);
 
         return in_array($scheme, ['http', 'https'], true);
     }

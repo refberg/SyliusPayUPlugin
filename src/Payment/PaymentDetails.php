@@ -7,6 +7,11 @@ namespace Refberg\SyliusPayUPlugin\Payment;
 use Refberg\SyliusPayUPlugin\Api\Model\PayUOrder;
 use Refberg\SyliusPayUPlugin\PayUGateway;
 use Sylius\Component\Payment\Model\PaymentInterface;
+use function array_reverse;
+use function in_array;
+use function is_array;
+use function is_int;
+use function is_string;
 
 /**
  * Typed access to the PayU data stored in Payment::$details[PayUGateway::DETAILS_KEY].

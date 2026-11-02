@@ -11,6 +11,11 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
+use function array_key_first;
+use function array_values;
+use function json_decode;
+use function json_encode;
+use const JSON_THROW_ON_ERROR;
 
 final class RefundFlowTest extends IntegrationTestCase
 {
@@ -24,7 +29,7 @@ final class RefundFlowTest extends IntegrationTestCase
         $refundCalls = $this->payu->requests('POST', '#/refunds$#');
         self::assertCount(1, $refundCalls);
         self::assertSame('/api/v2_1/orders/' . $orderId . '/refunds', $refundCalls[0]['path']);
-        $body = json_decode($refundCalls[0]['body'], true, 8, \JSON_THROW_ON_ERROR);
+        $body = json_decode($refundCalls[0]['body'], true, 8, JSON_THROW_ON_ERROR);
         self::assertIsArray($body);
         self::assertSame(['description' => 'Refund for order 000000001', 'amount' => 1500, 'currencyCode' => 'PLN'], [
             'description' => self::at($body, 'refund', 'description'),

@@ -4,8 +4,35 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Support;
 
+use LogicException;
+use OutOfBoundsException;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Contracts\HttpClient\ResponseInterface;
+use function array_filter;
+use function array_key_last;
+use function array_keys;
+use function array_map;
+use function array_merge;
+use function array_shift;
+use function array_values;
+use function count;
+use function explode;
+use function hash;
+use function is_scalar;
+use function is_string;
+use function json_decode;
+use function json_encode;
+use function parse_str;
+use function parse_url;
+use function preg_match;
+use function rawurldecode;
+use function sprintf;
+use function str_contains;
+use function str_starts_with;
+use function strtolower;
+use function substr;
+use function trim;
+use const JSON_THROW_ON_ERROR;
 
 /**
  * In-memory imitation of the PayU sandbox REST API, used as MockHttpClient callback.
@@ -51,7 +78,7 @@ final class FakePayU
         $parts = parse_url($url);
         $host = $parts['host'] ?? '';
         if (self::HOST !== $host) {
-            throw new \LogicException(sprintf('Tests must not call "%s". Only the PayU sandbox fake is available.', $host));
+            throw new LogicException(sprintf('Tests must not call "%s". Only the PayU sandbox fake is available.', $host));
         }
 
         $path = $parts['path'] ?? '/';
@@ -147,14 +174,14 @@ final class FakePayU
      */
     public function order(string $orderId): array
     {
-        return $this->orders[$orderId] ?? throw new \OutOfBoundsException(sprintf('Unknown fake PayU order "%s".', $orderId));
+        return $this->orders[$orderId] ?? throw new OutOfBoundsException(sprintf('Unknown fake PayU order "%s".', $orderId));
     }
 
     public function lastOrderId(): string
     {
         $last = array_key_last($this->orders);
 
-        return null !== $last ? (string) $last : throw new \LogicException('No PayU order has been created.');
+        return null !== $last ? (string) $last : throw new LogicException('No PayU order has been created.');
     }
 
     /**
@@ -199,19 +226,19 @@ final class FakePayU
             'order' => $order,
             'localReceiptDateTime' => '2026-01-01T12:00:00.000+01:00',
             'properties' => [['name' => 'PAYMENT_ID', 'value' => '5000000001']],
-        ], \JSON_THROW_ON_ERROR);
+        ], JSON_THROW_ON_ERROR);
     }
 
     public function refundNotificationBody(string $orderId, string $refundId, string $status): string
     {
         $order = $this->order($orderId);
-        $refund = $this->refunds[$refundId] ?? throw new \OutOfBoundsException('Unknown refund.');
+        $refund = $this->refunds[$refundId] ?? throw new OutOfBoundsException('Unknown refund.');
 
         return json_encode([
             'orderId' => $orderId,
             'extOrderId' => $order['extOrderId'],
             'refund' => array_merge($refund, ['status' => $status]),
-        ], \JSON_THROW_ON_ERROR);
+        ], JSON_THROW_ON_ERROR);
     }
 
     public static function signatureHeader(string $body, string $secondKey = self::SECOND_KEY, string $algorithm = 'SHA-256'): string
@@ -241,7 +268,7 @@ final class FakePayU
     private function createOrder(string $body): ResponseInterface
     {
         /** @var array<string, mixed> $data */
-        $data = json_decode($body, true, 32, \JSON_THROW_ON_ERROR);
+        $data = json_decode($body, true, 32, JSON_THROW_ON_ERROR);
 
         foreach (['notifyUrl', 'customerIp', 'merchantPosId', 'description', 'currencyCode', 'totalAmount', 'extOrderId', 'products'] as $field) {
             if (!isset($data[$field])) {
@@ -306,7 +333,7 @@ final class FakePayU
         }
 
         /** @var array{refund: array<string, mixed>} $data */
-        $data = json_decode($body, true, 32, \JSON_THROW_ON_ERROR);
+        $data = json_decode($body, true, 32, JSON_THROW_ON_ERROR);
         $refund = $data['refund'];
 
         foreach ($this->refunds as $existing) {
@@ -339,7 +366,7 @@ final class FakePayU
      */
     private static function json(int $status, array $data, array $headers = []): MockResponse
     {
-        return new MockResponse(json_encode($data, \JSON_THROW_ON_ERROR), [
+        return new MockResponse(json_encode($data, JSON_THROW_ON_ERROR), [
             'http_code' => $status,
             'response_headers' => array_merge(['Content-Type' => 'application/json'], $headers),
         ]);

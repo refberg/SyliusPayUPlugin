@@ -6,6 +6,9 @@ namespace Refberg\SyliusPayUPlugin\Config;
 
 use Refberg\SyliusPayUPlugin\PayUGateway;
 use Sylius\Component\Payment\Model\PaymentMethodInterface;
+use function is_scalar;
+use function sprintf;
+use function trim;
 
 final class CredentialsResolver implements CredentialsResolverInterface
 {

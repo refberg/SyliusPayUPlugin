@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\Config;
 
+use LogicException;
+use SensitiveParameter;
+
 final readonly class PayUCredentials
 {
     public function __construct(
         public string $posId,
-        #[\SensitiveParameter]
+        #[SensitiveParameter]
         public string $secondKey,
         public string $clientId,
-        #[\SensitiveParameter]
+        #[SensitiveParameter]
         public string $clientSecret,
         public Environment $environment,
     ) {
@@ -38,6 +41,6 @@ final readonly class PayUCredentials
      */
     public function __serialize(): array
     {
-        throw new \LogicException('PayU credentials must not be serialized.');
+        throw new LogicException('PayU credentials must not be serialized.');
     }
 }

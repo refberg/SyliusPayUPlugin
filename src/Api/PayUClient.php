@@ -16,6 +16,15 @@ use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface as HttpClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use function in_array;
+use function is_array;
+use function is_int;
+use function is_numeric;
+use function is_string;
+use function mb_substr;
+use function rawurlencode;
+use function sprintf;
+use function str_starts_with;
 
 /**
  * Minimal PayU REST API v2.1 client.

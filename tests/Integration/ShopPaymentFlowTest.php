@@ -11,6 +11,11 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentRequestTransitions;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
+use function json_encode;
+use function parse_url;
+use function str_replace;
+use const JSON_THROW_ON_ERROR;
+use const PHP_URL_PATH;
 
 final class ShopPaymentFlowTest extends IntegrationTestCase
 {
@@ -55,7 +60,7 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
         $orderId = $this->payu->lastOrderId();
 
         // The return URL can be opened by anyone and PayU may append "?error=501": it is not proof of payment.
-        $this->client->request('GET', parse_url($this->payu->order($orderId)['continueUrl'], \PHP_URL_PATH) . '?error=501');
+        $this->client->request('GET', parse_url($this->payu->order($orderId)['continueUrl'], PHP_URL_PATH) . '?error=501');
 
         self::assertTrue($this->client->getResponse()->isRedirect());
         self::assertSame('new', $this->reloadPayment($payment)->getState());
@@ -69,7 +74,7 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
         $orderId = $this->payu->lastOrderId();
         $this->payu->setOrderStatus($orderId, 'PENDING');
 
-        $this->client->request('GET', (string) parse_url($this->payu->order($orderId)['continueUrl'], \PHP_URL_PATH));
+        $this->client->request('GET', (string) parse_url($this->payu->order($orderId)['continueUrl'], PHP_URL_PATH));
 
         self::assertStringContainsString('/order/thank-you', (string) $this->client->getResponse()->headers->get('Location'));
         self::assertSame('new', $this->reloadPayment($payment)->getState());
@@ -82,7 +87,7 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
         $orderId = $this->payu->lastOrderId();
         $this->payu->setOrderStatus($orderId, 'COMPLETED');
 
-        $this->client->request('GET', (string) parse_url($this->payu->order($orderId)['continueUrl'], \PHP_URL_PATH));
+        $this->client->request('GET', (string) parse_url($this->payu->order($orderId)['continueUrl'], PHP_URL_PATH));
 
         self::assertStringContainsString('/order/thank-you', (string) $this->client->getResponse()->headers->get('Location'));
         $payment = $this->reloadPayment($payment);
@@ -150,10 +155,10 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
         $orderId = $this->payu->lastOrderId();
         $extOrderId = $this->payu->order($orderId)['extOrderId'];
 
-        $body = json_encode(['order' => ['orderId' => 'FOREIGNORDER', 'extOrderId' => $extOrderId, 'status' => 'COMPLETED']], \JSON_THROW_ON_ERROR);
+        $body = json_encode(['order' => ['orderId' => 'FOREIGNORDER', 'extOrderId' => $extOrderId, 'status' => 'COMPLETED']], JSON_THROW_ON_ERROR);
         self::assertSame(Response::HTTP_NOT_FOUND, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
 
-        $body = json_encode(['order' => ['orderId' => $orderId, 'extOrderId' => 'other-999-abcdef012345', 'status' => 'COMPLETED']], \JSON_THROW_ON_ERROR);
+        $body = json_encode(['order' => ['orderId' => $orderId, 'extOrderId' => 'other-999-abcdef012345', 'status' => 'COMPLETED']], JSON_THROW_ON_ERROR);
         self::assertSame(Response::HTTP_NOT_FOUND, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
 
         self::assertSame('new', $this->reloadPayment($payment)->getState());
