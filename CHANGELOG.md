@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 (2026-11-02)
+
+First release.
 
 - PayU REST API v2.1 gateway (`refberg_payu`) built on Sylius Payment Requests, without Payum.
 - Shop and API checkout with redirect to the PayU payment page.
@@ -9,4 +11,4 @@
 - Full refunds from the admin panel.
 - Cancelling a payment in Sylius cancels open PayU orders.
 - Refunds made in the PayU panel are recorded; a full refund marks the payment as refunded.
-- Support for Sylius 2.2 and 2.3.
+- Support for Sylius 2.2 and 2.3, PHP 8.2 to 8.4.
