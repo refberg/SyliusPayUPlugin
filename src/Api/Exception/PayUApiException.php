@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\Api\Exception;
 
+use function in_array;
+
 /**
  * PayU answered, but with an error (4xx/5xx or a non-SUCCESS status code).
  */

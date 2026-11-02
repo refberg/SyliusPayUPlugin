@@ -11,12 +11,12 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
 /**
  * Maps a payment request to one of the plugin commands; one service per action.
  */
-final class PaymentRequestCommandProvider implements PaymentRequestCommandProviderInterface
+final readonly class PaymentRequestCommandProvider implements PaymentRequestCommandProviderInterface
 {
     /**
      * @param class-string<PaymentRequestHashAwareInterface> $commandClass
      */
-    public function __construct(private readonly string $commandClass)
+    public function __construct(private string $commandClass)
     {
     }
 

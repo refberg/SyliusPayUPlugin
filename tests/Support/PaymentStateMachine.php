@@ -4,11 +4,17 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Support;
 
+use LogicException;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Payment\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentRequestTransitions;
 use Sylius\Component\Payment\PaymentTransitions;
+use function array_filter;
+use function array_map;
+use function array_values;
+use function in_array;
+use function sprintf;
 
 /**
  * Minimal copy of the Sylius "sylius_payment" and "sylius_payment_request" graphs for unit tests.
@@ -45,7 +51,7 @@ final class PaymentStateMachine implements StateMachineInterface
     public function apply(object $subject, string $graphName, string $transition, array $context = []): void
     {
         if (!$this->can($subject, $graphName, $transition)) {
-            throw new \LogicException(sprintf('Transition "%s" cannot be applied from "%s".', $transition, (string) $this->state($subject)));
+            throw new LogicException(sprintf('Transition "%s" cannot be applied from "%s".', $transition, (string) $this->state($subject)));
         }
 
         $to = self::GRAPHS[$graphName][$transition][1];

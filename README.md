@@ -1,5 +1,11 @@
 # Sylius PayU Plugin
 
+[![Build](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml)
+[![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-777bb4)](composer.json)
+[![Sylius](https://img.shields.io/badge/Sylius-2.2%20%7C%202.3-1abb9c)](https://sylius.com)
+[![PHPStan](https://img.shields.io/badge/PHPStan-level%20max-brightgreen)](phpstan.neon)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 [Polska wersja](README.pl.md)
 
 PayU payment gateway for Sylius 2, built on Sylius Payment Requests and the PayU REST API v2.1.
@@ -183,9 +189,15 @@ refund to PayU. Partial refunds only show up in the payment details, because Syl
 ```bash
 composer install
 vendor/bin/ecs check
+vendor/bin/rector process --dry-run
+vendor/bin/composer-dependency-analyser
+APP_ENV=test vendor/bin/console cache:warmup   # PHPStan reads the compiled test container
 vendor/bin/phpstan analyse
 vendor/bin/phpunit --testsuite=unit
 ```
+
+PHPStan runs at level max with the strict, deprecation, Doctrine, Symfony and PHPUnit rules. CI also checks
+`composer normalize`, `composer audit` and runs mutation tests with Infection (PHP 8.3+, `infection.json5`).
 
 Integration tests run the Sylius test application against MySQL:
 
@@ -198,6 +210,23 @@ vendor/bin/phpunit --testsuite=integration
 
 Tests never call PayU. All requests go to an in-memory fake of the PayU sandbox (`tests/Support/FakePayU.php`),
 which rejects any other host. The tests include signed, duplicated, out-of-order and forged notifications.
+
+### Tests against the PayU sandbox
+
+`tests/Sandbox` runs the whole flow against the real PayU sandbox: payment in the shop, payment on the PayU page
+(accepted and rejected, using the provider simulator), status check, refund and cancellation. It is not part of CI
+and is skipped unless enabled. Credentials are read from environment variables only; you can use the public
+sandbox POS from the [PayU sandbox documentation](https://developers.payu.com/europe/docs/testing/sandbox/).
+
+```bash
+npm install playwright && npx playwright install chromium
+PAYU_SANDBOX=1 PAYU_SANDBOX_POS_ID=... PAYU_SANDBOX_SECOND_KEY=... \
+PAYU_SANDBOX_CLIENT_ID=... PAYU_SANDBOX_CLIENT_SECRET=... \
+vendor/bin/phpunit --testsuite=sandbox
+```
+
+PayU cannot deliver notifications to a local machine, so these tests read the payment state from the PayU API.
+To check notification delivery, run the shop on a public URL (for example through a tunnel).
 
 ## License
 

@@ -8,3 +8,10 @@ parameters:
 
     excludePaths:
         - tests/TestApplication
+
+    # The test container must be compiled first: vendor/bin/console cache:warmup --env=test
+    symfony:
+        containerXmlPath: var/cache/test/Sylius_TestApplication_KernelTestDebugContainer.xml
+
+    doctrine:
+        objectManagerLoader: tests/object-manager.php

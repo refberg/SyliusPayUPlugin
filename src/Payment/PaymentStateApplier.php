@@ -21,7 +21,7 @@ use Sylius\Component\Payment\PaymentTransitions;
  *  - CANCELED fails the payment only when no other PayU order of this payment may still be paid,
  *  - NEW, PENDING and WAITING_FOR_CONFIRMATION never change the payment state.
  */
-final class PaymentStateApplier
+final readonly class PaymentStateApplier
 {
     public const RESULT_COMPLETED = 'completed';
 
@@ -32,8 +32,8 @@ final class PaymentStateApplier
     public const RESULT_WARNING = 'warning';
 
     public function __construct(
-        private readonly StateMachineInterface $stateMachine,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private StateMachineInterface $stateMachine,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -72,12 +72,7 @@ final class PaymentStateApplier
         $warning = null !== $completedOrderId ? PaymentDetails::WARNING_DUPLICATE_PAYMENT : PaymentDetails::WARNING_LATE_PAYMENT;
         $details->addWarning($warning, $order->orderId);
 
-        $this->logger->error('PayU order was paid, but the Sylius payment cannot be completed. Manual refund may be needed.', [
-            'payment_id' => $payment->getId(),
-            'payment_state' => $payment->getState(),
-            'payu_order_id' => $order->orderId,
-            'reason' => $warning,
-        ]);
+        $this->logger->error('PayU order was paid, but the Sylius payment cannot be completed. Manual refund may be needed.', ['payment_id' => $payment->getId(), 'payment_state' => $payment->getState(), 'payu_order_id' => $order->orderId, 'reason' => $warning]);
 
         return self::RESULT_WARNING;
     }

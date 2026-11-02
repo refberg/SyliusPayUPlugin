@@ -17,6 +17,7 @@ use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
+use function sprintf;
 
 /**
  * Requests a full refund of the PayU order that paid the payment.
@@ -24,17 +25,17 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
  * extRefundId is the payment request hash, so PayU deduplicates retries of the same request.
  * The final refund status (FINALIZED / CANCELED) arrives later as a signed notification.
  */
-final class RefundPaymentRequestHandler
+final readonly class RefundPaymentRequestHandler
 {
     use PaymentRequestHandlerTrait;
 
     public function __construct(
-        private readonly PaymentRequestProviderInterface $paymentRequestProvider,
-        private readonly CredentialsResolverInterface $credentialsResolver,
-        private readonly PayUClientInterface $client,
-        private readonly PaymentLockerInterface $paymentLocker,
-        private readonly StateMachineInterface $stateMachine,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private PaymentRequestProviderInterface $paymentRequestProvider,
+        private CredentialsResolverInterface $credentialsResolver,
+        private PayUClientInterface $client,
+        private PaymentLockerInterface $paymentLocker,
+        private StateMachineInterface $stateMachine,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 

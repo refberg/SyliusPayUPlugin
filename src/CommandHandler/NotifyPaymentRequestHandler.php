@@ -29,18 +29,18 @@ use Sylius\Component\Payment\PaymentTransitions;
  *
  * Transient PayU API failures are rethrown: the endpoint answers 5xx and PayU retries.
  */
-final class NotifyPaymentRequestHandler
+final readonly class NotifyPaymentRequestHandler
 {
     use PaymentRequestHandlerTrait;
 
     public function __construct(
-        private readonly PaymentRequestProviderInterface $paymentRequestProvider,
-        private readonly CredentialsResolverInterface $credentialsResolver,
-        private readonly NotificationParser $notificationParser,
-        private readonly PaymentSynchronizer $synchronizer,
-        private readonly PaymentLockerInterface $paymentLocker,
-        private readonly StateMachineInterface $stateMachine,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private PaymentRequestProviderInterface $paymentRequestProvider,
+        private CredentialsResolverInterface $credentialsResolver,
+        private NotificationParser $notificationParser,
+        private PaymentSynchronizer $synchronizer,
+        private PaymentLockerInterface $paymentLocker,
+        private StateMachineInterface $stateMachine,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -59,7 +59,7 @@ final class NotifyPaymentRequestHandler
         }
 
         $notification = $this->notificationParser->parseStoredPayload($paymentRequest->getPayload(), $credentials);
-        if (null === $notification) {
+        if (!$notification instanceof Notification) {
             $this->logger->warning('Rejected PayU notification with an invalid signature or body.', ['payment_id' => $payment->getId()]);
             $this->failRequest($paymentRequest, 'Invalid notification signature or body.');
 

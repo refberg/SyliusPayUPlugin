@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Integration;
 
+use DateTime;
 use Doctrine\Common\DataFixtures\Purger\ORMPurger;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ObjectRepository;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\PayUGateway;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfig;
@@ -43,9 +45,7 @@ abstract class IntegrationTestCase extends WebTestCase
         // Keep one kernel (and one FakePayU state) for all requests of a test.
         $this->client->disableReboot();
 
-        $payu = static::getContainer()->get(FakePayU::class);
-        self::assertInstanceOf(FakePayU::class, $payu);
-        $this->payu = $payu;
+        $this->payu = self::service(FakePayU::class, FakePayU::class);
 
         $connection = $this->em()->getConnection();
         $connection->executeStatement('SET FOREIGN_KEY_CHECKS = 0');
@@ -55,10 +55,7 @@ abstract class IntegrationTestCase extends WebTestCase
 
     protected function em(): EntityManagerInterface
     {
-        $em = static::getContainer()->get('doctrine.orm.entity_manager');
-        self::assertInstanceOf(EntityManagerInterface::class, $em);
-
-        return $em;
+        return self::service(EntityManagerInterface::class, 'doctrine.orm.entity_manager');
     }
 
     /**
@@ -89,13 +86,7 @@ abstract class IntegrationTestCase extends WebTestCase
         self::assertInstanceOf(GatewayConfigInterface::class, $gatewayConfig);
         $gatewayConfig->setFactoryName(PayUGateway::FACTORY_NAME);
         $gatewayConfig->setGatewayName('payu');
-        $gatewayConfig->setConfig([
-            'environment' => 'sandbox',
-            'pos_id' => FakePayU::POS_ID,
-            'second_key' => FakePayU::SECOND_KEY,
-            'oauth_client_id' => FakePayU::CLIENT_ID,
-            'oauth_client_secret' => FakePayU::CLIENT_SECRET,
-        ]);
+        $gatewayConfig->setConfig(['environment' => 'sandbox'] + $this->payuCredentials());
         if ($gatewayConfig instanceof GatewayConfig) {
             $gatewayConfig->setUsePayum(false);
         }
@@ -126,7 +117,7 @@ abstract class IntegrationTestCase extends WebTestCase
         $order->setState('new');
         $order->setPaymentState('awaiting_payment');
         $order->setCustomerIp('10.0.0.1');
-        $order->setCheckoutCompletedAt(new \DateTime());
+        $order->setCheckoutCompletedAt(new DateTime());
 
         $payment = $this->factory('payment')->createNew();
         self::assertInstanceOf(PaymentInterface::class, $payment);
@@ -143,6 +134,19 @@ abstract class IntegrationTestCase extends WebTestCase
         $em->flush();
 
         return $payment;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function payuCredentials(): array
+    {
+        return [
+            'pos_id' => FakePayU::POS_ID,
+            'second_key' => FakePayU::SECOND_KEY,
+            'oauth_client_id' => FakePayU::CLIENT_ID,
+            'oauth_client_secret' => FakePayU::CLIENT_SECRET,
+        ];
     }
 
     /**
@@ -200,8 +204,7 @@ abstract class IntegrationTestCase extends WebTestCase
     protected function paymentRequests(string $action): array
     {
         $this->em()->clear();
-        $repository = static::getContainer()->get('sylius.repository.payment_request');
-        self::assertInstanceOf(\Doctrine\Persistence\ObjectRepository::class, $repository);
+        $repository = self::service(ObjectRepository::class, 'sylius.repository.payment_request');
 
         /** @var list<PaymentRequestInterface> $requests */
         $requests = $repository->findBy(['action' => $action]);
@@ -231,9 +234,23 @@ abstract class IntegrationTestCase extends WebTestCase
      */
     private function factory(string $resource): FactoryInterface
     {
-        $factory = static::getContainer()->get('sylius.factory.' . $resource);
-        self::assertInstanceOf(FactoryInterface::class, $factory);
+        return self::service(FactoryInterface::class, 'sylius.factory.' . $resource);
+    }
 
-        return $factory;
+    /**
+     * Fetches a service from the test container and checks its type.
+     *
+     * @template T of object
+     *
+     * @param class-string<T> $class
+     *
+     * @return T
+     */
+    protected static function service(string $class, string $id): object
+    {
+        $service = self::getContainer()->get($id);
+        self::assertInstanceOf($class, $service);
+
+        return $service;
     }
 }

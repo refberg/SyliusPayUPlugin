@@ -119,8 +119,7 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
     private function applyTransition(PaymentInterface $payment, string $transition): void
     {
         $payment = $this->reloadPayment($payment);
-        $stateMachine = static::getContainer()->get('sylius_abstraction.state_machine');
-        self::assertInstanceOf(StateMachineInterface::class, $stateMachine);
+        $stateMachine = self::service(StateMachineInterface::class, 'sylius_abstraction.state_machine');
 
         $stateMachine->apply($payment, PaymentTransitions::GRAPH, $transition);
         $this->em()->flush();

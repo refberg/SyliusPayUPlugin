@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\Order;
 
+use InvalidArgumentException;
 use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
@@ -11,7 +12,7 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
 interface OrderRequestFactoryInterface
 {
     /**
-     * @throws \InvalidArgumentException
+     * @throws InvalidArgumentException
      *
      * @return array<string, mixed>
      */

@@ -12,6 +12,7 @@ use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplier;
 use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Payment\PaymentTransitions;
 use Tests\Refberg\SyliusPayUPlugin\Support\PaymentStateMachine;
+use function sprintf;
 
 final class PaymentStateApplierTest extends TestCase
 {

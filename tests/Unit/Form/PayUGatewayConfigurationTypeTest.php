@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\Form;
 
+use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Form\Type\PayUGatewayConfigurationType;
 use Symfony\Component\Form\Extension\Validator\ValidatorExtension;
-use Symfony\Component\Form\Test\TypeTestCase;
+use Symfony\Component\Form\FormFactoryInterface;
+use Symfony\Component\Form\Forms;
 use Symfony\Component\Validator\Validation;
+use function array_merge;
 
-final class PayUGatewayConfigurationTypeTest extends TypeTestCase
+final class PayUGatewayConfigurationTypeTest extends TestCase
 {
     private const STORED = [
         'environment' => 'production',
@@ -19,9 +22,13 @@ final class PayUGatewayConfigurationTypeTest extends TypeTestCase
         'oauth_client_secret' => 'stored-client-secret',
     ];
 
-    protected function getExtensions(): array
+    private FormFactoryInterface $factory;
+
+    protected function setUp(): void
     {
-        return [new ValidatorExtension(Validation::createValidator())];
+        $this->factory = Forms::createFormFactoryBuilder()
+            ->addExtension(new ValidatorExtension(Validation::createValidator()))
+            ->getFormFactory();
     }
 
     public function test_secrets_are_not_rendered(): void

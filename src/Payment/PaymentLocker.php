@@ -15,9 +15,9 @@ use Sylius\Component\Payment\Model\PaymentInterface;
  * Payment request handlers run inside the "doctrine_transaction" middleware of
  * the payment request command bus, which provides the transaction.
  */
-final class PaymentLocker implements PaymentLockerInterface
+final readonly class PaymentLocker implements PaymentLockerInterface
 {
-    public function __construct(private readonly EntityManagerInterface $entityManager)
+    public function __construct(private EntityManagerInterface $entityManager)
     {
     }
 

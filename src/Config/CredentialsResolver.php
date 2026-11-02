@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace Refberg\SyliusPayUPlugin\Config;
 
 use Refberg\SyliusPayUPlugin\PayUGateway;
+use Sylius\Component\Payment\Model\GatewayConfigInterface;
 use Sylius\Component\Payment\Model\PaymentMethodInterface;
+use function is_scalar;
+use function sprintf;
+use function trim;
 
 final class CredentialsResolver implements CredentialsResolverInterface
 {
     public function supports(PaymentMethodInterface $paymentMethod): bool
     {
         $gatewayConfig = $paymentMethod->getGatewayConfig();
-        if (null === $gatewayConfig) {
+        if (!$gatewayConfig instanceof GatewayConfigInterface) {
             return false;
         }
 

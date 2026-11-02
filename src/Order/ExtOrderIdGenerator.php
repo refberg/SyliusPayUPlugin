@@ -4,9 +4,18 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\Order;
 
+use InvalidArgumentException;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
+use function is_scalar;
+use function mb_substr;
+use function preg_match;
+use function preg_replace;
+use function sprintf;
+use function str_replace;
+use function strtolower;
+use function substr;
 
 /**
  * Builds PayU "extOrderId" values: "<orderNumber>-<paymentId>-<12 hex chars of the payment request hash>".
@@ -23,7 +32,7 @@ final class ExtOrderIdGenerator
         $paymentId = $payment->getId();
         $hash = $paymentRequest->getId();
         if (!is_scalar($paymentId) || '' === (string) $paymentId || null === $hash) {
-            throw new \InvalidArgumentException('Payment and payment request must be persisted before creating a PayU order.');
+            throw new InvalidArgumentException('Payment and payment request must be persisted before creating a PayU order.');
         }
 
         $order = $payment->getOrder();

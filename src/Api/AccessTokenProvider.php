@@ -12,18 +12,24 @@ use Symfony\Contracts\Cache\ItemInterface;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface as HttpClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use function hash;
+use function implode;
+use function is_numeric;
+use function is_string;
+use function max;
+use function sprintf;
 
 /**
  * Obtains OAuth access tokens (grant_type=client_credentials) and caches them until shortly before expiry.
  */
-final class AccessTokenProvider implements AccessTokenProviderInterface
+final readonly class AccessTokenProvider implements AccessTokenProviderInterface
 {
     private const EXPIRY_MARGIN_SECONDS = 60;
 
     public function __construct(
-        private readonly HttpClientInterface $httpClient,
-        private readonly CacheInterface $cache,
-        private readonly float $timeout = 15.0,
+        private HttpClientInterface $httpClient,
+        private CacheInterface $cache,
+        private float $timeout = 15.0,
     ) {
     }
 

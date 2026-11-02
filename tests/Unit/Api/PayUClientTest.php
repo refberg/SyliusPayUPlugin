@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\Api;
 
+use LogicException;
+use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Api\AccessTokenProvider;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUApiException;
@@ -17,6 +19,8 @@ use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
 use Tests\Refberg\SyliusPayUPlugin\Support\MemoryLogger;
+use function json_encode;
+use const JSON_THROW_ON_ERROR;
 
 final class PayUClientTest extends TestCase
 {
@@ -93,10 +97,10 @@ final class PayUClientTest extends TestCase
         }
     }
 
-    #[\PHPUnit\Framework\Attributes\TestWith([503])]
-    #[\PHPUnit\Framework\Attributes\TestWith([500])]
-    #[\PHPUnit\Framework\Attributes\TestWith([429])]
-    #[\PHPUnit\Framework\Attributes\TestWith([408])]
+    #[TestWith([503])]
+    #[TestWith([500])]
+    #[TestWith([429])]
+    #[TestWith([408])]
     public function test_temporary_errors_are_transient(int $httpStatus): void
     {
         $this->payu->failNextRequest($httpStatus);
@@ -186,7 +190,7 @@ final class PayUClientTest extends TestCase
     {
         $credentials = new PayUCredentials('1', 'k', 'c', 's', Environment::Production);
 
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         $this->expectExceptionMessage('secure.payu.com');
 
         $this->client()->retrieveOrder($credentials, 'X');
@@ -203,7 +207,7 @@ final class PayUClientTest extends TestCase
         } catch (PayUApiException) {
         }
 
-        $serialized = json_encode($this->logger->records, \JSON_THROW_ON_ERROR);
+        $serialized = json_encode($this->logger->records, JSON_THROW_ON_ERROR);
         self::assertNotSame('[]', $serialized);
         foreach ([FakePayU::CLIENT_SECRET, FakePayU::SECOND_KEY, 'fake-token-1'] as $secret) {
             self::assertStringNotContainsString($secret, $serialized);

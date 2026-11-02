@@ -4,6 +4,18 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\Signature;
 
+use SensitiveParameter;
+use function count;
+use function explode;
+use function hash;
+use function hash_equals;
+use function in_array;
+use function is_array;
+use function is_string;
+use function strtolower;
+use function strtoupper;
+use function trim;
+
 /**
  * Verifies the "OpenPayu-Signature" header of PayU notifications.
  *
@@ -27,7 +39,7 @@ final class SignatureVerifier implements SignatureVerifierInterface
         'SHA-512' => 'sha512',
     ];
 
-    public function verify(string $rawBody, ?string $signatureHeader, #[\SensitiveParameter] string $secondKey): bool
+    public function verify(string $rawBody, ?string $signatureHeader, #[SensitiveParameter] string $secondKey): bool
     {
         if ('' === $rawBody || null === $signatureHeader || '' === $secondKey) {
             return false;
@@ -84,7 +96,8 @@ final class SignatureVerifier implements SignatureVerifierInterface
         $signature = strtolower($parts['signature'] ?? '');
         $algorithm = self::ALGORITHMS[strtoupper($parts['algorithm'] ?? '')] ?? null;
 
-        if (null === $algorithm || 1 !== preg_match('/^[0-9a-f]+$/', $signature)) {
+        // The value is compared with hash_equals(), so anything that is not the expected hex digest fails there.
+        if (null === $algorithm || '' === $signature) {
             return null;
         }
 

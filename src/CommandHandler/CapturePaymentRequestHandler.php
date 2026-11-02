@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Refberg\SyliusPayUPlugin\CommandHandler;
 
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUException;
@@ -20,25 +21,26 @@ use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use Sylius\Component\Payment\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentRequestTransitions;
+use function sprintf;
 
 /**
  * Creates a PayU order and stores the redirect URL in the payment request response data.
  *
  * It never completes the payment: only a verified notification or a direct API query can.
  */
-final class CapturePaymentRequestHandler
+final readonly class CapturePaymentRequestHandler
 {
     use PaymentRequestHandlerTrait;
 
     public function __construct(
-        private readonly PaymentRequestProviderInterface $paymentRequestProvider,
-        private readonly CredentialsResolverInterface $credentialsResolver,
-        private readonly PayUClientInterface $client,
-        private readonly OrderRequestFactoryInterface $orderRequestFactory,
-        private readonly ExtOrderIdGenerator $extOrderIdGenerator,
-        private readonly PaymentLockerInterface $paymentLocker,
-        private readonly StateMachineInterface $stateMachine,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private PaymentRequestProviderInterface $paymentRequestProvider,
+        private CredentialsResolverInterface $credentialsResolver,
+        private PayUClientInterface $client,
+        private OrderRequestFactoryInterface $orderRequestFactory,
+        private ExtOrderIdGenerator $extOrderIdGenerator,
+        private PaymentLockerInterface $paymentLocker,
+        private StateMachineInterface $stateMachine,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -66,7 +68,7 @@ final class CapturePaymentRequestHandler
             $extOrderId = $this->extOrderIdGenerator->generate($payment, $paymentRequest);
             $orderRequest = $this->orderRequestFactory->create($paymentRequest, $payment, $credentials, $extOrderId);
             $created = $this->client->createOrder($credentials, $orderRequest);
-        } catch (PayUException|InvalidConfigurationException|\InvalidArgumentException $exception) {
+        } catch (PayUException|InvalidConfigurationException|InvalidArgumentException $exception) {
             $this->logger->warning('Could not create PayU order.', [
                 'payment_id' => $payment->getId(),
                 'reason' => $exception->getMessage(),

@@ -12,11 +12,11 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * PayU expects HTTP 200 for an accepted notification. Other gateways keep the core response.
  */
-final class NotifyResponseProvider implements NotifyResponseProviderInterface
+final readonly class NotifyResponseProvider implements NotifyResponseProviderInterface
 {
     public function __construct(
-        private readonly NotifyResponseProviderInterface $decorated,
-        private readonly CredentialsResolverInterface $credentialsResolver,
+        private NotifyResponseProviderInterface $decorated,
+        private CredentialsResolverInterface $credentialsResolver,
     ) {
     }
 

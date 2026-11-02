@@ -1,5 +1,11 @@
 # Sylius PayU Plugin
 
+[![Build](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml)
+[![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-777bb4)](composer.json)
+[![Sylius](https://img.shields.io/badge/Sylius-2.2%20%7C%202.3-1abb9c)](https://sylius.com)
+[![PHPStan](https://img.shields.io/badge/PHPStan-level%20max-brightgreen)](phpstan.neon)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 [English version](README.md)
 
 Bramka płatności PayU dla Syliusa 2, oparta na systemie Payment Request Syliusa i PayU REST API v2.1.
@@ -183,9 +189,15 @@ wysyłany kolejny zwrot. Zwroty częściowe są widoczne tylko w szczegółach p
 ```bash
 composer install
 vendor/bin/ecs check
+vendor/bin/rector process --dry-run
+vendor/bin/composer-dependency-analyser
+APP_ENV=test vendor/bin/console cache:warmup   # PHPStan korzysta ze skompilowanego kontenera testowego
 vendor/bin/phpstan analyse
 vendor/bin/phpunit --testsuite=unit
 ```
+
+PHPStan działa na poziomie max z regułami strict, deprecation, Doctrine, Symfony i PHPUnit. CI sprawdza też
+`composer normalize` i `composer audit` oraz uruchamia testy mutacyjne Infection (PHP 8.3+, `infection.json5`).
 
 Testy integracyjne uruchamiają aplikację testową Syliusa na MySQL:
 
@@ -199,6 +211,23 @@ vendor/bin/phpunit --testsuite=integration
 Testy nigdy nie łączą się z PayU. Wszystkie żądania trafiają do działającej w pamięci atrapy sandboxa PayU
 (`tests/Support/FakePayU.php`), która odrzuca każdy inny host. Testy obejmują powiadomienia podpisane,
 zduplikowane, w złej kolejności oraz sfałszowane.
+
+### Testy na sandboxie PayU
+
+`tests/Sandbox` przechodzi cały proces na prawdziwym sandboxie PayU: płatność w sklepie, zapłatę na stronie PayU
+(zaakceptowaną i odrzuconą, przez symulator dostawcy), sprawdzenie statusu, zwrot i anulowanie. Te testy nie są
+częścią CI i są pomijane, dopóki ich nie włączysz. Dane dostępowe są czytane tylko ze zmiennych środowiskowych;
+możesz użyć publicznego punktu płatności z [dokumentacji sandboxa PayU](https://developers.payu.com/europe/docs/testing/sandbox/).
+
+```bash
+npm install playwright && npx playwright install chromium
+PAYU_SANDBOX=1 PAYU_SANDBOX_POS_ID=... PAYU_SANDBOX_SECOND_KEY=... \
+PAYU_SANDBOX_CLIENT_ID=... PAYU_SANDBOX_CLIENT_SECRET=... \
+vendor/bin/phpunit --testsuite=sandbox
+```
+
+PayU nie dostarczy powiadomień na komputer lokalny, więc te testy odczytują stan płatności z API PayU.
+Dostarczanie powiadomień sprawdzisz, uruchamiając sklep pod publicznym adresem (np. przez tunel).
 
 ## Licencja
 

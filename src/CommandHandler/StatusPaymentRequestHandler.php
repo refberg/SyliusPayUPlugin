@@ -15,23 +15,24 @@ use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
+use function array_slice;
 
 /**
  * Runs when the customer comes back from PayU (after-pay) or when an API client asks for the status.
  *
  * The state is taken from GET /orders/{orderId}; query parameters of the return URL are ignored.
  */
-final class StatusPaymentRequestHandler
+final readonly class StatusPaymentRequestHandler
 {
     use PaymentRequestHandlerTrait;
 
     public function __construct(
-        private readonly PaymentRequestProviderInterface $paymentRequestProvider,
-        private readonly CredentialsResolverInterface $credentialsResolver,
-        private readonly PaymentSynchronizer $synchronizer,
-        private readonly PaymentLockerInterface $paymentLocker,
-        private readonly StateMachineInterface $stateMachine,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private PaymentRequestProviderInterface $paymentRequestProvider,
+        private CredentialsResolverInterface $credentialsResolver,
+        private PaymentSynchronizer $synchronizer,
+        private PaymentLockerInterface $paymentLocker,
+        private StateMachineInterface $stateMachine,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
