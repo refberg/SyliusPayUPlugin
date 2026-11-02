@@ -11,4 +11,4 @@ First release.
 - Full refunds from the admin panel.
 - Cancelling a payment in Sylius cancels open PayU orders.
 - Refunds made in the PayU panel are recorded; a full refund marks the payment as refunded.
-- Support for Sylius 2.2 and 2.3, PHP 8.2 to 8.5 and Symfony 6.4, 7.4 and 8.
+- Support for Sylius 2.2 and 2.3, PHP 8.2 to 8.5 and Symfony 6.4, 7.4 and 8.x (tested on 8.1).
