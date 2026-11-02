@@ -33,7 +33,7 @@
         "symfony/http-client-contracts": "^3.4",
         "symfony/http-foundation": "^6.4 || ^7.4",
         "symfony/http-kernel": "^6.4 || ^7.4",
-        "symfony/routing": "^6.4 || ^7.4",
+        "symfony/routing": "^8.1.10",
         "symfony/validator": "^6.4 || ^7.4",
         "symfony/workflow": "^6.4 || ^7.4"
     },
