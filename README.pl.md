@@ -3,7 +3,7 @@
 [![Build](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml)
 [![Latest version](https://img.shields.io/packagist/v/refberg/sylius-payu-plugin)](https://packagist.org/packages/refberg/sylius-payu-plugin)
 [![Downloads](https://img.shields.io/packagist/dt/refberg/sylius-payu-plugin)](https://packagist.org/packages/refberg/sylius-payu-plugin)
-[![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-777bb4)](composer.json)
+[![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4%20%7C%208.5-777bb4)](composer.json)
 [![Sylius](https://img.shields.io/badge/Sylius-2.2%20%7C%202.3-1abb9c)](https://sylius.com)
 [![Symfony](https://img.shields.io/badge/Symfony-6.4%20%7C%207.4%20%7C%208-000000)](https://symfony.com)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%20max-brightgreen)](phpstan.neon)
@@ -33,7 +33,7 @@ Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, 
 | Sylius | PHP     | Symfony                                 |
 |--------|---------|-----------------------------------------|
 | 2.2    | 8.2–8.4 | 6.4, 7.4                                |
-| 2.3    | 8.3–8.4 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4)      |
+| 2.3    | 8.3–8.5 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4+)     |
 
 ## Instalacja
 
