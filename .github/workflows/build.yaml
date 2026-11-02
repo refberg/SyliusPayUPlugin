@@ -25,7 +25,7 @@ jobs:
 
         steps:
             -
-                uses: actions/checkout@v5
+                uses: actions/checkout@v7
 
             -
                 name: Set up PHP
@@ -107,7 +107,7 @@ jobs:
 
         steps:
             -
-                uses: actions/checkout@v5
+                uses: actions/checkout@v7
 
             -
                 name: Set up PHP
@@ -155,7 +155,7 @@ jobs:
 
         steps:
             -
-                uses: actions/checkout@v5
+                uses: actions/checkout@v7
 
             -
                 name: Set up PHP
