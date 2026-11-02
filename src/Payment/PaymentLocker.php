@@ -28,6 +28,19 @@ final class PaymentLocker implements PaymentLockerInterface
         }
 
         $this->entityManager->lock($payment, LockMode::PESSIMISTIC_WRITE);
-        $this->entityManager->refresh($payment);
+
+        // Reload the latest committed data, unless this request already changed the payment
+        // (e.g. the admin "refund" transition that triggered this handler): refreshing would drop that change.
+        if (!$this->hasPendingChanges($payment)) {
+            $this->entityManager->refresh($payment);
+        }
+    }
+
+    private function hasPendingChanges(PaymentInterface $payment): bool
+    {
+        $original = $this->entityManager->getUnitOfWork()->getOriginalEntityData($payment);
+
+        return ($original['state'] ?? null) !== $payment->getState() ||
+            ($original['details'] ?? []) !== $payment->getDetails();
     }
 }

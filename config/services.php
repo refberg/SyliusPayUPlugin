@@ -8,10 +8,12 @@ use Refberg\SyliusPayUPlugin\Api\AccessTokenProvider;
 use Refberg\SyliusPayUPlugin\Api\AccessTokenProviderInterface;
 use Refberg\SyliusPayUPlugin\Api\PayUClient;
 use Refberg\SyliusPayUPlugin\Api\PayUClientInterface;
+use Refberg\SyliusPayUPlugin\Command\CancelPaymentRequest;
 use Refberg\SyliusPayUPlugin\Command\CapturePaymentRequest;
 use Refberg\SyliusPayUPlugin\Command\NotifyPaymentRequest;
 use Refberg\SyliusPayUPlugin\Command\RefundPaymentRequest;
 use Refberg\SyliusPayUPlugin\Command\StatusPaymentRequest;
+use Refberg\SyliusPayUPlugin\CommandHandler\CancelPaymentRequestHandler;
 use Refberg\SyliusPayUPlugin\CommandHandler\CapturePaymentRequestHandler;
 use Refberg\SyliusPayUPlugin\CommandHandler\NotifyPaymentRequestHandler;
 use Refberg\SyliusPayUPlugin\CommandHandler\RefundPaymentRequestHandler;
@@ -19,7 +21,7 @@ use Refberg\SyliusPayUPlugin\CommandHandler\StatusPaymentRequestHandler;
 use Refberg\SyliusPayUPlugin\CommandProvider\PaymentRequestCommandProvider;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolver;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
-use Refberg\SyliusPayUPlugin\EventListener\RefundPaymentListener;
+use Refberg\SyliusPayUPlugin\EventListener\PaymentTransitionListener;
 use Refberg\SyliusPayUPlugin\Form\Type\PayUGatewayConfigurationType;
 use Refberg\SyliusPayUPlugin\Notification\NotificationParser;
 use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator;
@@ -105,6 +107,7 @@ return static function (ContainerConfigurator $container): void {
         'status' => [StatusPaymentRequest::class, [PaymentRequestInterface::ACTION_STATUS]],
         'notify' => [NotifyPaymentRequest::class, [PaymentRequestInterface::ACTION_NOTIFY]],
         'refund' => [RefundPaymentRequest::class, [PaymentRequestInterface::ACTION_REFUND]],
+        'cancel' => [CancelPaymentRequest::class, [PaymentRequestInterface::ACTION_CANCEL]],
     ];
     foreach ($commands as $name => [$commandClass, $actions]) {
         $definition = $services->set('refberg_payu.command_provider.' . $name, PaymentRequestCommandProvider::class)
@@ -155,6 +158,17 @@ return static function (ContainerConfigurator $container): void {
         ->tag('messenger.message_handler', ['bus' => 'sylius.payment_request.command_bus'])
         ->tag('monolog.logger', ['channel' => 'payu']);
 
+    $services->set(CancelPaymentRequestHandler::class)
+        ->args([
+            ...$handlerDefaults,
+            service(PayUClientInterface::class),
+            service(PaymentLockerInterface::class),
+            service('sylius_abstraction.state_machine'),
+            service('logger')->ignoreOnInvalid(),
+        ])
+        ->tag('messenger.message_handler', ['bus' => 'sylius.payment_request.command_bus'])
+        ->tag('monolog.logger', ['channel' => 'payu']);
+
     $services->set(RefundPaymentRequestHandler::class)
         ->args([
             ...$handlerDefaults,
@@ -194,13 +208,20 @@ return static function (ContainerConfigurator $container): void {
         ->args([service('sylius_shop.provider.order_pay.final_url')])
         ->tag('refberg_payu.http_response_provider', ['action' => PaymentRequestInterface::ACTION_STATUS]);
 
-    // Refunds from the admin panel
-    $services->set(RefundPaymentListener::class)
-        ->args([
-            service(CredentialsResolverInterface::class),
-            service('sylius.factory.payment_request'),
-            service('sylius.repository.payment_request'),
-            service('sylius.announcer.payment_request'),
-        ])
-        ->tag('kernel.event_listener', ['event' => 'workflow.sylius_payment.completed.refund']);
+    // Refunds and cancellations from the admin panel
+    $transitionActions = [
+        'refund' => PaymentRequestInterface::ACTION_REFUND,
+        'cancel' => PaymentRequestInterface::ACTION_CANCEL,
+    ];
+    foreach ($transitionActions as $transition => $action) {
+        $services->set('refberg_payu.listener.payment_transition.' . $transition, PaymentTransitionListener::class)
+            ->args([
+                service(CredentialsResolverInterface::class),
+                service('sylius.factory.payment_request'),
+                service('sylius.repository.payment_request'),
+                service('sylius.announcer.payment_request'),
+                $action,
+            ])
+            ->tag('kernel.event_listener', ['event' => 'workflow.sylius_payment.completed.' . $transition]);
+    }
 };

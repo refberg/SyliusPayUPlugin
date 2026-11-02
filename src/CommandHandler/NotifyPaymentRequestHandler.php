@@ -17,6 +17,8 @@ use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
+use Sylius\Component\Core\Model\PaymentInterface;
+use Sylius\Component\Payment\PaymentTransitions;
 
 /**
  * Handles a PayU notification stored by Sylius' notify endpoint.
@@ -74,7 +76,7 @@ final class NotifyPaymentRequestHandler
         }
 
         if (Notification::TYPE_REFUND === $notification->type) {
-            $this->handleRefund($notification, $details);
+            $this->handleRefund($notification, $details, $payment);
             $this->completeRequest($paymentRequest, ['type' => 'refund', 'refund_status' => $notification->refundStatus]);
 
             return;
@@ -100,14 +102,43 @@ final class NotifyPaymentRequestHandler
         ]);
     }
 
-    private function handleRefund(Notification $notification, PaymentDetails $details): void
+    private function handleRefund(Notification $notification, PaymentDetails $details, PaymentInterface $payment): void
     {
         if (null === $notification->refundId || null === $notification->refundStatus) {
             return;
         }
 
-        if (!$details->updateRefundStatus($notification->refundId, $notification->extRefundId, $notification->refundStatus)) {
-            $this->logger->warning('PayU refund notification for an unknown refund.', [
+        if ($details->updateRefundStatus($notification->refundId, $notification->extRefundId, $notification->refundStatus)) {
+            $details->save();
+
+            if ('CANCELED' === $notification->refundStatus) {
+                $this->logger->error('PayU canceled a refund; it has to be handled manually.', [
+                    'payu_order_id' => $notification->orderId,
+                    'payu_refund_id' => $notification->refundId,
+                ]);
+            }
+
+            return;
+        }
+
+        $this->handleExternalRefund($notification, $details, $payment);
+    }
+
+    /**
+     * A refund made outside Sylius, e.g. in the PayU panel. It is recorded, and once finalized
+     * refunds cover the whole payment, the payment is moved to "refunded".
+     * A partial refund does not change the payment state: Sylius has no state for it.
+     */
+    private function handleExternalRefund(Notification $notification, PaymentDetails $details, PaymentInterface $payment): void
+    {
+        if (
+            $notification->orderId !== $details->getCompletedOrderId() ||
+            null === $notification->refundAmount ||
+            null === $notification->refundCurrency ||
+            $notification->refundCurrency !== $payment->getCurrencyCode()
+        ) {
+            $this->logger->warning('Ignored PayU refund notification that does not match the paid order.', [
+                'payment_id' => $payment->getId(),
                 'payu_order_id' => $notification->orderId,
                 'payu_refund_id' => $notification->refundId,
             ]);
@@ -115,13 +146,22 @@ final class NotifyPaymentRequestHandler
             return;
         }
 
+        if (!$details->recordExternalRefund((string) $notification->refundId, (string) $notification->refundStatus, $notification->refundAmount, $notification->refundCurrency)) {
+            return;
+        }
         $details->save();
 
-        if ('CANCELED' === $notification->refundStatus) {
-            $this->logger->error('PayU canceled a refund; it has to be handled manually.', [
-                'payu_order_id' => $notification->orderId,
-                'payu_refund_id' => $notification->refundId,
-            ]);
+        $this->logger->info('Recorded a PayU refund made outside Sylius.', [
+            'payment_id' => $payment->getId(),
+            'payu_refund_id' => $notification->refundId,
+            'status' => $notification->refundStatus,
+        ]);
+
+        if (
+            $details->finalizedRefundAmount() >= (int) $payment->getAmount() &&
+            $this->stateMachine->can($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND)
+        ) {
+            $this->stateMachine->apply($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND);
         }
     }
 }

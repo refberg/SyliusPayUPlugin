@@ -13,10 +13,10 @@ use Sylius\Component\Payment\Repository\PaymentRequestRepositoryInterface;
 use Symfony\Component\Workflow\Event\CompletedEvent;
 
 /**
- * When an administrator refunds a PayU payment (sylius_payment "refund" transition),
- * a payment request with the "refund" action is created and dispatched.
+ * Turns a completed "sylius_payment" transition of a PayU payment into a payment request
+ * (e.g. "refund" → ACTION_REFUND, "cancel" → ACTION_CANCEL) and dispatches it.
  */
-final class RefundPaymentListener
+final class PaymentTransitionListener
 {
     /**
      * @param PaymentRequestFactoryInterface<PaymentRequestInterface> $paymentRequestFactory
@@ -27,6 +27,7 @@ final class RefundPaymentListener
         private readonly PaymentRequestFactoryInterface $paymentRequestFactory,
         private readonly PaymentRequestRepositoryInterface $paymentRequestRepository,
         private readonly PaymentRequestAnnouncerInterface $paymentRequestAnnouncer,
+        private readonly string $action,
     ) {
     }
 
@@ -42,17 +43,13 @@ final class RefundPaymentListener
             return;
         }
 
-        $existing = $this->paymentRequestRepository->findOneByActionPaymentAndMethod(
-            PaymentRequestInterface::ACTION_REFUND,
-            $payment,
-            $method,
-        );
+        $existing = $this->paymentRequestRepository->findOneByActionPaymentAndMethod($this->action, $payment, $method);
         if (null !== $existing) {
             return;
         }
 
         $paymentRequest = $this->paymentRequestFactory->create($payment, $method);
-        $paymentRequest->setAction(PaymentRequestInterface::ACTION_REFUND);
+        $paymentRequest->setAction($this->action);
         $this->paymentRequestRepository->add($paymentRequest);
 
         $this->paymentRequestAnnouncer->dispatchPaymentRequestCommand($paymentRequest);

@@ -92,7 +92,29 @@ final class FakePayU
             return $this->retrieveOrder(rawurldecode($matches[1]));
         }
 
+        if (1 === preg_match('#^/api/v2_1/orders/([^/]+)$#', $path, $matches) && 'DELETE' === $method) {
+            return $this->cancelOrder(rawurldecode($matches[1]));
+        }
+
         return self::json(404, ['status' => ['statusCode' => 'DATA_NOT_FOUND']]);
+    }
+
+    /**
+     * Simulates a refund created by the merchant in the PayU panel, outside Sylius.
+     */
+    public function createPanelRefund(string $orderId, int $amount): string
+    {
+        $order = $this->order($orderId);
+        $refundId = sprintf('%d', 7000000 + count($this->refunds) + 1);
+        $this->refunds[$refundId] = [
+            'refundId' => $refundId,
+            'amount' => (string) $amount,
+            'currencyCode' => $order['currencyCode'],
+            'description' => 'Panel refund',
+            'status' => 'PENDING',
+        ];
+
+        return $refundId;
     }
 
     public function setOrderStatus(string $orderId, string $status): void
@@ -262,6 +284,21 @@ final class FakePayU
         return self::json(200, ['orders' => [$this->orders[$orderId]], 'status' => ['statusCode' => 'SUCCESS']]);
     }
 
+    private function cancelOrder(string $orderId): ResponseInterface
+    {
+        if (!isset($this->orders[$orderId])) {
+            return self::json(404, ['status' => ['statusCode' => 'DATA_NOT_FOUND']]);
+        }
+
+        if ('COMPLETED' === $this->orders[$orderId]['status']) {
+            return self::json(400, ['status' => ['statusCode' => 'ERROR_VALUE_INVALID', 'statusDesc' => 'Only orders which are not COMPLETED can be cancelled']]);
+        }
+
+        $this->orders[$orderId]['status'] = 'CANCELED';
+
+        return self::json(200, ['orderId' => $orderId, 'extOrderId' => $this->orders[$orderId]['extOrderId'], 'status' => ['statusCode' => 'SUCCESS']]);
+    }
+
     private function createRefund(string $orderId, string $body): ResponseInterface
     {
         if (!isset($this->orders[$orderId]) || 'COMPLETED' !== $this->orders[$orderId]['status']) {
@@ -273,7 +310,7 @@ final class FakePayU
         $refund = $data['refund'];
 
         foreach ($this->refunds as $existing) {
-            if ($existing['extRefundId'] === ($refund['extRefundId'] ?? null)) {
+            if (isset($existing['extRefundId']) && $existing['extRefundId'] === ($refund['extRefundId'] ?? null)) {
                 return self::json(200, ['orderId' => $orderId, 'refund' => $existing, 'status' => ['statusCode' => 'SUCCESS']]);
             }
         }

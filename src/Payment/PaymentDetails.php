@@ -219,6 +219,45 @@ final class PaymentDetails
         return false;
     }
 
+    /**
+     * Records a refund made outside Sylius (e.g. in the PayU panel), keyed by the PayU refund ID.
+     *
+     * @return bool false when the refund was already known
+     */
+    public function recordExternalRefund(string $refundId, string $status, int $amount, string $currency): bool
+    {
+        foreach ($this->refunds() as $refund) {
+            if (($refund['refund_id'] ?? null) === $refundId) {
+                return false;
+            }
+        }
+
+        $refunds = $this->refunds();
+        $refunds['payu-' . $refundId] = [
+            'refund_id' => $refundId,
+            'status' => $status,
+            'amount' => $amount,
+            'currency' => $currency,
+            'external' => true,
+        ];
+        $this->data['refunds'] = $refunds;
+
+        return true;
+    }
+
+    public function finalizedRefundAmount(): int
+    {
+        $total = 0;
+        foreach ($this->refunds() as $refund) {
+            $amount = $refund['amount'] ?? 0;
+            if ('FINALIZED' === ($refund['status'] ?? null) && is_int($amount)) {
+                $total += $amount;
+            }
+        }
+
+        return $total;
+    }
+
     public function hasActiveRefund(): bool
     {
         foreach ($this->refunds() as $refund) {

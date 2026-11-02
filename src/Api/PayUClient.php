@@ -93,6 +93,17 @@ final class PayUClient implements PayUClientInterface
         throw new PayUApiException('PayU order response does not contain the requested order.', $statusCode);
     }
 
+    public function cancelOrder(PayUCredentials $credentials, string $orderId): void
+    {
+        [$statusCode, $data] = $this->request($credentials, 'DELETE', '/api/v2_1/orders/' . rawurlencode($orderId));
+
+        if (200 !== $statusCode || self::STATUS_SUCCESS !== self::payuStatusCode($data)) {
+            throw $this->apiError('Canceling PayU order failed', $statusCode, $data);
+        }
+
+        $this->logger->info('PayU order canceled.', ['payu_order_id' => $orderId]);
+    }
+
     public function createRefund(PayUCredentials $credentials, string $orderId, array $refund): RefundCreated
     {
         [$statusCode, $data] = $this->request(

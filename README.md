@@ -13,10 +13,11 @@ It does not use Payum.
 - Notifications are verified (`OpenPayu-Signature`), then the order is read again from the PayU API
   and checked against the Sylius payment: PayU order ID, `extOrderId`, POS ID, amount and currency.
 - Duplicated and out-of-order notifications do not change the result and never pay an order twice.
-- Full refunds from the admin panel.
+- Full refunds from the admin panel; refunds made in the PayU panel are synchronized.
+- Cancelling a payment in Sylius cancels the open PayU order.
 - Credentials are stored encrypted by Sylius and are not written to logs.
 
-Out of scope: saved cards, recurring payments, embedded card form, partial refunds.
+Out of scope: saved cards, recurring payments, embedded card form, partial refunds started from Sylius.
 
 ## Requirements
 
@@ -154,6 +155,19 @@ notification is stored in the payment details.
 Sylius marks the payment as refunded right away, before PayU confirms the refund. If PayU rejects the refund,
 the refund payment request is marked as failed and an error is logged. The refund then has to be handled
 in the PayU panel.
+
+### Cancellation
+
+When a PayU payment is cancelled in Sylius (for example when the order is cancelled), the plugin cancels every
+PayU order of that payment that may still be paid (`DELETE /api/v2_1/orders/{orderId}`). If PayU refuses because
+the order was already paid, the cancel payment request is marked as failed and an error is logged; the later
+COMPLETED notification is recorded as a warning and the payment is not completed.
+
+### Refunds made in the PayU panel
+
+A signed refund notification for a refund that Sylius did not request is recorded in the payment details.
+When finalized refunds cover the whole payment amount, the payment is moved to `refunded` without sending another
+refund to PayU. Partial refunds only show up in the payment details, because Sylius has no state for them.
 
 ## Security notes
 

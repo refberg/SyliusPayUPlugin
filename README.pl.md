@@ -13,10 +13,11 @@ Plugin nie używa Payum.
 - Powiadomienia są weryfikowane (`OpenPayu-Signature`). Następnie zamówienie jest ponownie pobierane z API PayU
   i porównywane z płatnością w Syliusie: identyfikator zamówienia PayU, `extOrderId`, POS ID, kwota i waluta.
 - Duplikaty i powiadomienia w złej kolejności nie zmieniają wyniku i nigdy nie opłacają zamówienia dwa razy.
-- Pełne zwroty z panelu admina.
+- Pełne zwroty z panelu admina; zwroty zlecone w panelu PayU są synchronizowane.
+- Anulowanie płatności w Syliusie anuluje otwarte zamówienie w PayU.
 - Dane dostępowe są przechowywane w postaci zaszyfrowanej przez Syliusa i nie trafiają do logów.
 
-Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, zwroty częściowe.
+Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, zwroty częściowe zlecane z Syliusa.
 
 ## Wymagania
 
@@ -154,6 +155,19 @@ z powiadomienia PayU jest zapisywany w szczegółach płatności.
 
 Sylius oznacza płatność jako zwróconą od razu, zanim PayU potwierdzi zwrot. Jeśli PayU odrzuci zwrot, żądanie
 zwrotu zostaje oznaczone jako nieudane i zapisywany jest błąd w logu. Wtedy zwrot trzeba obsłużyć w panelu PayU.
+
+### Anulowanie
+
+Gdy płatność PayU zostanie anulowana w Syliusie (np. razem z zamówieniem), plugin anuluje w PayU wszystkie
+zamówienia tej płatności, które mogą jeszcze zostać opłacone (`DELETE /api/v2_1/orders/{orderId}`). Jeśli PayU
+odmówi, bo zamówienie zostało już opłacone, żądanie anulowania jest oznaczane jako nieudane i zapisywany jest błąd
+w logu. Późniejsze powiadomienie COMPLETED zostaje zapisane jako ostrzeżenie, a płatność nie zostaje opłacona.
+
+### Zwroty zlecone w panelu PayU
+
+Podpisane powiadomienie o zwrocie, którego nie zlecił Sylius, jest zapisywane w szczegółach płatności.
+Gdy zakończone zwroty pokryją całą kwotę płatności, płatność przechodzi w stan `refunded`, a do PayU nie jest
+wysyłany kolejny zwrot. Zwroty częściowe są widoczne tylko w szczegółach płatności, bo Sylius nie ma dla nich stanu.
 
 ## Bezpieczeństwo
 

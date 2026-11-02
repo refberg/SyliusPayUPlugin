@@ -75,6 +75,8 @@ final class NotificationParser
                 refundId: self::string($refund, 'refundId'),
                 extRefundId: self::string($refund, 'extRefundId'),
                 refundStatus: self::string($refund, 'status'),
+                refundAmount: is_numeric($refund['amount'] ?? null) ? (int) $refund['amount'] : null,
+                refundCurrency: self::string($refund, 'currencyCode'),
             );
         }
 

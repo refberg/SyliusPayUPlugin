@@ -23,6 +23,8 @@ final readonly class Notification
         public ?string $refundId = null,
         public ?string $extRefundId = null,
         public ?string $refundStatus = null,
+        public ?int $refundAmount = null,
+        public ?string $refundCurrency = null,
     ) {
     }
 }

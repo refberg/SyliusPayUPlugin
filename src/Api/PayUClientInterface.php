@@ -25,6 +25,13 @@ interface PayUClientInterface
     public function retrieveOrder(PayUCredentials $credentials, string $orderId): PayUOrder;
 
     /**
+     * Cancels an order that is not COMPLETED (DELETE /api/v2_1/orders/{orderId}).
+     *
+     * @throws PayUException
+     */
+    public function cancelOrder(PayUCredentials $credentials, string $orderId): void;
+
+    /**
      * @param array<string, mixed> $refund content of the "refund" object
      *
      * @throws PayUException

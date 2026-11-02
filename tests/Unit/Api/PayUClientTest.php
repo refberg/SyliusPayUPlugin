@@ -158,6 +158,20 @@ final class PayUClientTest extends TestCase
         self::assertSame('r-1', $refund->extRefundId);
     }
 
+    public function test_it_cancels_an_open_order_but_not_a_completed_one(): void
+    {
+        $client = $this->client();
+        $open = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $paid = $client->createOrder(self::credentials(), self::orderBody('000001-1-bbbbbbbbbbbb'));
+        $this->payu->setOrderStatus($paid->orderId, 'COMPLETED');
+
+        $client->cancelOrder(self::credentials(), $open->orderId);
+        self::assertSame('CANCELED', $this->payu->order($open->orderId)['status']);
+
+        $this->expectException(PayUApiException::class);
+        $client->cancelOrder(self::credentials(), $paid->orderId);
+    }
+
     public function test_transport_errors_are_wrapped(): void
     {
         $httpClient = new MockHttpClient(static fn (): MockResponse => new MockResponse('', ['error' => 'Connection timed out']));
