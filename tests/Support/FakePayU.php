@@ -110,9 +110,14 @@ final class FakePayU
         $this->orders[$orderId][$field] = $value;
     }
 
-    public function failNextRequest(int $httpStatus, string $payuStatusCode = 'ERROR_INTERNAL'): void
+    public function failNextRequest(int $httpStatus, string $payuStatusCode = 'ERROR_INTERNAL', ?string $codeLiteral = null): void
     {
-        $this->queuedFailures[] = [$httpStatus, ['status' => ['statusCode' => $payuStatusCode]]];
+        $status = ['statusCode' => $payuStatusCode];
+        if (null !== $codeLiteral) {
+            $status['codeLiteral'] = $codeLiteral;
+        }
+
+        $this->queuedFailures[] = [$httpStatus, ['status' => $status]];
     }
 
     /**

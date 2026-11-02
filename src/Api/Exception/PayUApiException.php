@@ -29,6 +29,7 @@ final class PayUApiException extends PayUException
 
     public function isTransient(): bool
     {
-        return $this->httpStatusCode >= 500 || 429 === $this->httpStatusCode;
+        // 408 TIMEOUT and 429 (sandbox throttling) are documented by PayU as temporary.
+        return $this->httpStatusCode >= 500 || in_array($this->httpStatusCode, [408, 429], true);
     }
 }

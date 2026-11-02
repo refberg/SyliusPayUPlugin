@@ -75,6 +75,15 @@ It is `https://<your-shop>/payment-methods/<PAYMENT_METHOD_CODE>`.
 Keep **automatic collection (autoReceive)** enabled for the POS in the PayU panel.
 Orders waiting for manual confirmation (`WAITING_FOR_CONFIRMATION`) stay unpaid in Sylius.
 
+PayU retries a notification until it gets HTTP 200, for up to 72 hours. If your firewall filters incoming traffic,
+allow the PayU notification servers:
+
+- production: 185.68.12.10, 185.68.12.11, 185.68.12.12, 185.68.12.26, 185.68.12.27, 185.68.12.28
+- sandbox: 185.68.14.10, 185.68.14.11, 185.68.14.12, 185.68.14.26, 185.68.14.27, 185.68.14.28
+
+For manual tests you can use the public PLN sandbox POS published in the
+[PayU sandbox documentation](https://developers.payu.com/europe/docs/testing/sandbox/).
+
 If payment requests are processed asynchronously (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` other than `sync://`),
 set `framework.router.default_uri` to the public shop URL, so the notification URL is generated correctly.
 

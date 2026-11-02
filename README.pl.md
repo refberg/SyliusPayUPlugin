@@ -75,6 +75,15 @@ Ma postać `https://<twój-sklep>/payment-methods/<KOD_METODY_PŁATNOŚCI>`.
 W panelu PayU zostaw włączony **automatyczny odbiór płatności (autoReceive)** dla punktu płatności.
 Zamówienia czekające na ręczne potwierdzenie (`WAITING_FOR_CONFIRMATION`) pozostają w Syliusie nieopłacone.
 
+PayU ponawia powiadomienie, dopóki nie dostanie odpowiedzi HTTP 200, maksymalnie przez 72 godziny. Jeśli firewall
+filtruje ruch przychodzący, dopuść serwery powiadomień PayU:
+
+- produkcja: 185.68.12.10, 185.68.12.11, 185.68.12.12, 185.68.12.26, 185.68.12.27, 185.68.12.28
+- sandbox: 185.68.14.10, 185.68.14.11, 185.68.14.12, 185.68.14.26, 185.68.14.27, 185.68.14.28
+
+Do ręcznych testów możesz użyć publicznego punktu płatności PLN w sandboxie, opisanego w
+[dokumentacji sandboxa PayU](https://developers.payu.com/europe/docs/testing/sandbox/).
+
 Jeśli żądania płatności są przetwarzane asynchronicznie (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` inny niż `sync://`),
 ustaw `framework.router.default_uri` na publiczny adres sklepu, żeby adres powiadomień był generowany poprawnie.
 

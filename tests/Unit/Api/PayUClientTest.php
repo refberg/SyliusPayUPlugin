@@ -93,9 +93,13 @@ final class PayUClientTest extends TestCase
         }
     }
 
-    public function test_server_errors_are_transient(): void
+    #[\PHPUnit\Framework\Attributes\TestWith([503])]
+    #[\PHPUnit\Framework\Attributes\TestWith([500])]
+    #[\PHPUnit\Framework\Attributes\TestWith([429])]
+    #[\PHPUnit\Framework\Attributes\TestWith([408])]
+    public function test_temporary_errors_are_transient(int $httpStatus): void
     {
-        $this->payu->failNextRequest(503);
+        $this->payu->failNextRequest($httpStatus);
 
         try {
             $this->client()->retrieveOrder(self::credentials(), 'X');
@@ -103,6 +107,16 @@ final class PayUClientTest extends TestCase
         } catch (PayUApiException $exception) {
             self::assertTrue($exception->isTransient());
         }
+    }
+
+    public function test_error_message_contains_the_payu_code_literal(): void
+    {
+        $this->payu->failNextRequest(400, 'OPENPAYU_BUSINESS_ERROR', 'TRANS_NOT_ENDED');
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('OPENPAYU_BUSINESS_ERROR/TRANS_NOT_ENDED');
+
+        $this->client()->createRefund(self::credentials(), 'X', ['description' => 'Refund']);
     }
 
     public function test_it_rejects_a_duplicated_ext_order_id(): void

@@ -179,18 +179,21 @@ final class PayUClient implements PayUClientInterface
         $payuStatusCode = self::payuStatusCode($data);
         $status = $data['status'] ?? null;
         $statusDesc = is_array($status) ? self::stringValue($status, 'statusDesc') : null;
+        $codeLiteral = is_array($status) ? self::stringValue($status, 'codeLiteral') : null;
 
         $this->logger->error($message . '.', [
             'http_status' => $statusCode,
             'payu_status' => $payuStatusCode,
+            'payu_code' => $codeLiteral,
         ]);
 
         return new PayUApiException(
             sprintf(
-                '%s (HTTP %d%s%s).',
+                '%s (HTTP %d%s%s%s).',
                 $message,
                 $statusCode,
                 null !== $payuStatusCode ? ', ' . $payuStatusCode : '',
+                null !== $codeLiteral ? '/' . $codeLiteral : '',
                 null !== $statusDesc ? ': ' . mb_substr($statusDesc, 0, 200) : '',
             ),
             $statusCode,
