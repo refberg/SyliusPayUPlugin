@@ -161,7 +161,7 @@ final class SandboxFlowTest extends IntegrationTestCase
      */
     private function service(string $class, ?string $id = null): object
     {
-        $service = static::getContainer()->get($id ?? $class);
+        $service = self::getContainer()->get($id ?? $class);
         self::assertInstanceOf($class, $service);
 
         return $service;

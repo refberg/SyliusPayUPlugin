@@ -7,6 +7,7 @@ namespace Refberg\SyliusPayUPlugin\Order;
 use InvalidArgumentException;
 use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Sylius\Bundle\CoreBundle\OrderPay\Provider\UrlProviderInterface;
+use Sylius\Component\Core\Model\AddressInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
@@ -131,7 +132,7 @@ final readonly class OrderRequestFactory implements OrderRequestFactoryInterface
         }
 
         $address = $order->getBillingAddress();
-        if (null !== $address) {
+        if ($address instanceof AddressInterface) {
             $buyer += array_filter([
                 'firstName' => (string) $address->getFirstName(),
                 'lastName' => (string) $address->getLastName(),

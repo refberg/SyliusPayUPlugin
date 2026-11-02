@@ -270,7 +270,7 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
 
     private function finalizeCaptureRequests(string $transition): void
     {
-        $stateMachine = static::getContainer()->get('sylius_abstraction.state_machine');
+        $stateMachine = self::getContainer()->get('sylius_abstraction.state_machine');
         self::assertInstanceOf(StateMachineInterface::class, $stateMachine);
 
         foreach ($this->paymentRequests(PaymentRequestInterface::ACTION_CAPTURE) as $request) {

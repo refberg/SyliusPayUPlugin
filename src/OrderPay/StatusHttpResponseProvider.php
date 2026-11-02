@@ -11,7 +11,6 @@ use Sylius\Bundle\ResourceBundle\Controller\RequestConfiguration;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
 use function in_array;
 
 /**
@@ -37,7 +36,7 @@ final readonly class StatusHttpResponseProvider implements HttpResponseProviderI
             in_array($paymentRequest->getResponseData()['payu_status'] ?? null, self::IN_PROGRESS, true);
     }
 
-    public function getResponse(Request|RequestConfiguration $request, PaymentRequestInterface $paymentRequest): Response
+    public function getResponse(Request|RequestConfiguration $request, PaymentRequestInterface $paymentRequest): RedirectResponse
     {
         return new RedirectResponse($this->finalUrlProvider->getUrl(null));
     }

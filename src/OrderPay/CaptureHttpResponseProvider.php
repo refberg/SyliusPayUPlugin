@@ -27,7 +27,7 @@ final class CaptureHttpResponseProvider implements HttpResponseProviderInterface
             null !== self::redirectUrl($paymentRequest);
     }
 
-    public function getResponse(Request|RequestConfiguration $request, PaymentRequestInterface $paymentRequest): Response
+    public function getResponse(Request|RequestConfiguration $request, PaymentRequestInterface $paymentRequest): RedirectResponse
     {
         $url = self::redirectUrl($paymentRequest) ?? throw new LogicException('PayU redirect URL is missing.');
 

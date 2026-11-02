@@ -113,7 +113,7 @@ final class RefundFlowTest extends IntegrationTestCase
     private function refundInAdmin(PaymentInterface $payment): void
     {
         $payment = $this->reloadPayment($payment);
-        $stateMachine = static::getContainer()->get('sylius_abstraction.state_machine');
+        $stateMachine = self::getContainer()->get('sylius_abstraction.state_machine');
         self::assertInstanceOf(StateMachineInterface::class, $stateMachine);
 
         $stateMachine->apply($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND);

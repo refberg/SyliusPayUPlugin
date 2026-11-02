@@ -8,6 +8,7 @@ use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
 use Sylius\Bundle\PaymentBundle\Announcer\PaymentRequestAnnouncerInterface;
 use Sylius\Component\Payment\Factory\PaymentRequestFactoryInterface;
 use Sylius\Component\Payment\Model\PaymentInterface;
+use Sylius\Component\Payment\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\Repository\PaymentRequestRepositoryInterface;
 use Symfony\Component\Workflow\Event\CompletedEvent;
@@ -39,12 +40,12 @@ final readonly class PaymentTransitionListener
         }
 
         $method = $payment->getMethod();
-        if (null === $method || !$this->credentialsResolver->supports($method)) {
+        if (!$method instanceof PaymentMethodInterface || !$this->credentialsResolver->supports($method)) {
             return;
         }
 
         $existing = $this->paymentRequestRepository->findOneByActionPaymentAndMethod($this->action, $payment, $method);
-        if (null !== $existing) {
+        if ($existing instanceof PaymentRequestInterface) {
             return;
         }
 
