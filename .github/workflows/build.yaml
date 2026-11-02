@@ -46,7 +46,7 @@ jobs:
 
             -
                 name: Install dependencies
-                uses: ramsey/composer-install@v3
+                uses: ramsey/composer-install@v4
 
             -
                 name: Check for known vulnerabilities
@@ -124,7 +124,7 @@ jobs:
 
             -
                 name: Install dependencies
-                uses: ramsey/composer-install@v3
+                uses: ramsey/composer-install@v4
 
             -
                 name: Check for known vulnerabilities
@@ -168,7 +168,7 @@ jobs:
 
             -
                 name: Install dependencies
-                uses: ramsey/composer-install@v3
+                uses: ramsey/composer-install@v4
 
             -
                 name: Run Infection
