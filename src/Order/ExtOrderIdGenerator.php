@@ -1,0 +1,47 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Refberg\SyliusPayUPlugin\Order;
+
+use Sylius\Component\Core\Model\OrderInterface;
+use Sylius\Component\Core\Model\PaymentInterface;
+use Sylius\Component\Payment\Model\PaymentRequestInterface;
+
+/**
+ * Builds PayU "extOrderId" values: "<orderNumber>-<paymentId>-<12 hex chars of the payment request hash>".
+ *
+ * PayU requires extOrderId to be unique per POS, so every payment attempt gets its own value.
+ * The payment ID can be read back from a notification without trusting anything else in it.
+ */
+final class ExtOrderIdGenerator
+{
+    private const PATTERN = '/-(\d+)-([0-9a-f]{12})$/';
+
+    public function generate(PaymentInterface $payment, PaymentRequestInterface $paymentRequest): string
+    {
+        $paymentId = $payment->getId();
+        $hash = $paymentRequest->getId();
+        if (!is_scalar($paymentId) || '' === (string) $paymentId || null === $hash) {
+            throw new \InvalidArgumentException('Payment and payment request must be persisted before creating a PayU order.');
+        }
+
+        $order = $payment->getOrder();
+        $number = $order instanceof OrderInterface ? (string) $order->getNumber() : '';
+        $number = preg_replace('/[^A-Za-z0-9_.]/', '', $number) ?? '';
+        if ('' === $number) {
+            $number = 'order';
+        }
+
+        return sprintf('%s-%d-%s', mb_substr($number, 0, 40), (int) $paymentId, substr(str_replace('-', '', strtolower($hash)), 0, 12));
+    }
+
+    public function extractPaymentId(string $extOrderId): ?int
+    {
+        if (1 !== preg_match(self::PATTERN, $extOrderId, $matches)) {
+            return null;
+        }
+
+        return (int) $matches[1];
+    }
+}

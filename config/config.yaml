@@ -1,0 +1,8 @@
+imports:
+    - { resource: "twig_hooks/**/*.yaml" }
+
+framework:
+    cache:
+        pools:
+            refberg_payu.cache:
+                adapter: cache.app

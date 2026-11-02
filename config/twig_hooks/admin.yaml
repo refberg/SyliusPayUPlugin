@@ -1,0 +1,7 @@
+sylius_twig_hooks:
+    hooks:
+        'sylius_admin.payment_method.create.content.form.sections.gateway_configuration.refberg_payu': &refberg_payu_gateway_configuration
+            refberg_payu:
+                template: '@RefbergSyliusPayUPlugin/admin/payment_method/gateway_configuration.html.twig'
+                priority: 0
+        'sylius_admin.payment_method.update.content.form.sections.gateway_configuration.refberg_payu': *refberg_payu_gateway_configuration

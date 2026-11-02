@@ -1,0 +1,14 @@
+refberg_payu:
+    gateway_factory:
+        refberg_payu: PayU
+    form:
+        gateway_configuration:
+            environment: Environment
+            environment_sandbox: Sandbox (secure.snd.payu.com)
+            environment_production: Production (secure.payu.com)
+            pos_id: POS ID (pos_id)
+            second_key: Second key (MD5)
+            oauth_client_id: OAuth client ID (client_id)
+            oauth_client_secret: OAuth client secret (client_secret)
+            secret_help: Stored encrypted. Leave empty to keep the current value.
+            notify_url: 'Notification URL (set automatically for every order):'

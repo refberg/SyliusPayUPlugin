@@ -1,0 +1,14 @@
+refberg_payu:
+    gateway_factory:
+        refberg_payu: PayU
+    form:
+        gateway_configuration:
+            environment: Środowisko
+            environment_sandbox: Sandbox (secure.snd.payu.com)
+            environment_production: Produkcja (secure.payu.com)
+            pos_id: Id punktu płatności (pos_id)
+            second_key: Drugi klucz (MD5)
+            oauth_client_id: Protokół OAuth – client_id
+            oauth_client_secret: Protokół OAuth – client_secret
+            secret_help: Przechowywany w postaci zaszyfrowanej. Zostaw puste, aby nie zmieniać obecnej wartości.
+            notify_url: 'Adres powiadomień (przekazywany automatycznie przy każdym zamówieniu):'
