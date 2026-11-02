@@ -97,8 +97,8 @@ final class SandboxFlowTest extends IntegrationTestCase
         $payment = $this->reloadPayment($payment);
         $method = $payment->getMethod();
         self::assertNotNull($method);
-        $credentials = $this->service(CredentialsResolverInterface::class)->resolve($method);
-        self::assertSame('CANCELED', $this->service(PayUClientInterface::class)->retrieveOrder($credentials, $orderId)->status);
+        $credentials = self::service(CredentialsResolverInterface::class, CredentialsResolverInterface::class)->resolve($method);
+        self::assertSame('CANCELED', self::service(PayUClientInterface::class, PayUClientInterface::class)->retrieveOrder($credentials, $orderId)->status);
     }
 
     protected function payuCredentials(): array
@@ -147,23 +147,8 @@ final class SandboxFlowTest extends IntegrationTestCase
     private function applyTransition(PaymentInterface $payment, string $transition): void
     {
         $payment = $this->reloadPayment($payment);
-        $this->service(StateMachineInterface::class, 'sylius_abstraction.state_machine')
+        self::service(StateMachineInterface::class, 'sylius_abstraction.state_machine')
             ->apply($payment, PaymentTransitions::GRAPH, $transition);
         $this->em()->flush();
-    }
-
-    /**
-     * @template T of object
-     *
-     * @param class-string<T> $class
-     *
-     * @return T
-     */
-    private function service(string $class, ?string $id = null): object
-    {
-        $service = self::getContainer()->get($id ?? $class);
-        self::assertInstanceOf($class, $service);
-
-        return $service;
     }
 }

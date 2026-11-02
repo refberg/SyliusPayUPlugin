@@ -15,7 +15,8 @@ final class RemoveShopServicesPass implements CompilerPassInterface
 {
     public function process(ContainerBuilder $container): void
     {
-        if (!$container->has('sylius_shop.provider.order_pay.final_url')) {
+        $finalUrlProvider = 'sylius_shop.provider.order_pay.final_url';
+        if (!$container->hasDefinition($finalUrlProvider) && !$container->hasAlias($finalUrlProvider)) {
             $container->removeDefinition(StatusHttpResponseProvider::class);
         }
     }

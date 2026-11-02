@@ -45,9 +45,7 @@ abstract class IntegrationTestCase extends WebTestCase
         // Keep one kernel (and one FakePayU state) for all requests of a test.
         $this->client->disableReboot();
 
-        $payu = static::getContainer()->get(FakePayU::class);
-        self::assertInstanceOf(FakePayU::class, $payu);
-        $this->payu = $payu;
+        $this->payu = self::service(FakePayU::class, FakePayU::class);
 
         $connection = $this->em()->getConnection();
         $connection->executeStatement('SET FOREIGN_KEY_CHECKS = 0');
@@ -57,10 +55,7 @@ abstract class IntegrationTestCase extends WebTestCase
 
     protected function em(): EntityManagerInterface
     {
-        $em = static::getContainer()->get('doctrine.orm.entity_manager');
-        self::assertInstanceOf(EntityManagerInterface::class, $em);
-
-        return $em;
+        return self::service(EntityManagerInterface::class, 'doctrine.orm.entity_manager');
     }
 
     /**
@@ -209,8 +204,7 @@ abstract class IntegrationTestCase extends WebTestCase
     protected function paymentRequests(string $action): array
     {
         $this->em()->clear();
-        $repository = static::getContainer()->get('sylius.repository.payment_request');
-        self::assertInstanceOf(ObjectRepository::class, $repository);
+        $repository = self::service(ObjectRepository::class, 'sylius.repository.payment_request');
 
         /** @var list<PaymentRequestInterface> $requests */
         $requests = $repository->findBy(['action' => $action]);
@@ -240,9 +234,23 @@ abstract class IntegrationTestCase extends WebTestCase
      */
     private function factory(string $resource): FactoryInterface
     {
-        $factory = static::getContainer()->get('sylius.factory.' . $resource);
-        self::assertInstanceOf(FactoryInterface::class, $factory);
+        return self::service(FactoryInterface::class, 'sylius.factory.' . $resource);
+    }
 
-        return $factory;
+    /**
+     * Fetches a service from the test container and checks its type.
+     *
+     * @template T of object
+     *
+     * @param class-string<T> $class
+     *
+     * @return T
+     */
+    protected static function service(string $class, string $id): object
+    {
+        $service = self::getContainer()->get($id);
+        self::assertInstanceOf($class, $service);
+
+        return $service;
     }
 }
