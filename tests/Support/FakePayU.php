@@ -116,7 +116,7 @@ final class FakePayU
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, string>
      */
     public function order(string $orderId): array
     {
