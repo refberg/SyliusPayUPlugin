@@ -1,8 +1,6 @@
 # Sylius PayU Plugin
 
 [![Build](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml)
-[![Latest version](https://img.shields.io/packagist/v/refberg/sylius-payu-plugin)](https://packagist.org/packages/refberg/sylius-payu-plugin)
-[![Downloads](https://img.shields.io/packagist/dt/refberg/sylius-payu-plugin)](https://packagist.org/packages/refberg/sylius-payu-plugin)
 [![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-777bb4)](composer.json)
 [![Sylius](https://img.shields.io/badge/Sylius-2.2%20%7C%202.3-1abb9c)](https://sylius.com)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%20max-brightgreen)](phpstan.neon)
