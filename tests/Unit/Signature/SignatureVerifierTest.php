@@ -108,6 +108,24 @@ final class SignatureVerifierTest extends TestCase
         self::assertFalse($this->verifier->verify(self::BODY, sprintf('signature=%s;algorithm=MD5', md5(self::BODY)), ''));
     }
 
+    public function test_header_parsing_tolerates_spacing_case_and_empty_parts(): void
+    {
+        $header = sprintf(' Sender = checkout ;; ; SIGNATURE = %s ; Algorithm = md5 ; content=DOC=UMENT', md5(self::BODY . self::KEY));
+
+        self::assertTrue($this->verifier->verify(self::BODY, $header, self::KEY));
+    }
+
+    public function test_it_finds_the_signature_among_other_headers(): void
+    {
+        $headers = [
+            'content-type' => ['application/json'],
+            'authorization' => ['Basic xyz'],
+            'openpayu-signature' => ['sender=checkout'],
+        ];
+
+        self::assertSame('sender=checkout', $this->verifier->extractHeader($headers));
+    }
+
     public function test_it_extracts_the_header_case_insensitively(): void
     {
         self::assertSame('a=b', $this->verifier->extractHeader(['openpayu-signature' => ['a=b']]));

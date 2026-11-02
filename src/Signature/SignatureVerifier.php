@@ -12,7 +12,6 @@ use function hash_equals;
 use function in_array;
 use function is_array;
 use function is_string;
-use function preg_match;
 use function strtolower;
 use function strtoupper;
 use function trim;
@@ -97,7 +96,8 @@ final class SignatureVerifier implements SignatureVerifierInterface
         $signature = strtolower($parts['signature'] ?? '');
         $algorithm = self::ALGORITHMS[strtoupper($parts['algorithm'] ?? '')] ?? null;
 
-        if (null === $algorithm || 1 !== preg_match('/^[0-9a-f]+$/', $signature)) {
+        // The value is compared with hash_equals(), so anything that is not the expected hex digest fails there.
+        if (null === $algorithm || '' === $signature) {
             return null;
         }
 

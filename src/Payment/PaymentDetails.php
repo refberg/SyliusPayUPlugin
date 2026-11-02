@@ -31,13 +31,13 @@ final class PaymentDetails
 
     public const WARNING_LATE_PAYMENT = 'payment_completed_after_failure';
 
-    /** @var array<string, mixed> */
+    /** @var array<array-key, mixed> */
     private array $data;
 
     private function __construct(private readonly PaymentInterface $payment)
     {
         $data = $payment->getDetails()[PayUGateway::DETAILS_KEY] ?? [];
-        $this->data = is_array($data) ? self::stringKeys($data) : [];
+        $this->data = is_array($data) ? $data : [];
     }
 
     public static function of(PaymentInterface $payment): self
@@ -168,7 +168,7 @@ final class PaymentDetails
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * @return list<array<array-key, mixed>>
      */
     public function warnings(): array
     {
@@ -180,7 +180,7 @@ final class PaymentDetails
         $result = [];
         foreach ($warnings as $warning) {
             if (is_array($warning)) {
-                $result[] = self::stringKeys($warning);
+                $result[] = $warning;
             }
         }
 
@@ -275,7 +275,7 @@ final class PaymentDetails
     }
 
     /**
-     * @return array<array-key, array<string, mixed>>
+     * @return array<array-key, array<array-key, mixed>>
      */
     public function refunds(): array
     {
@@ -285,7 +285,7 @@ final class PaymentDetails
     }
 
     /**
-     * @return array<array-key, array<string, mixed>>
+     * @return array<array-key, array<array-key, mixed>>
      */
     private function orders(): array
     {
@@ -297,30 +297,15 @@ final class PaymentDetails
     /**
      * @param array<array-key, mixed> $items
      *
-     * @return array<array-key, array<string, mixed>>
+     * @return array<array-key, array<array-key, mixed>>
      */
     private static function mapOfArrays(array $items): array
     {
         $result = [];
         foreach ($items as $key => $item) {
             if (is_array($item)) {
-                $result[(string) $key] = self::stringKeys($item);
+                $result[$key] = $item;
             }
-        }
-
-        return $result;
-    }
-
-    /**
-     * @param array<array-key, mixed> $data
-     *
-     * @return array<string, mixed>
-     */
-    private static function stringKeys(array $data): array
-    {
-        $result = [];
-        foreach ($data as $key => $value) {
-            $result[(string) $key] = $value;
         }
 
         return $result;

@@ -72,12 +72,7 @@ final readonly class PaymentStateApplier
         $warning = null !== $completedOrderId ? PaymentDetails::WARNING_DUPLICATE_PAYMENT : PaymentDetails::WARNING_LATE_PAYMENT;
         $details->addWarning($warning, $order->orderId);
 
-        $this->logger->error('PayU order was paid, but the Sylius payment cannot be completed. Manual refund may be needed.', [
-            'payment_id' => $payment->getId(),
-            'payment_state' => $payment->getState(),
-            'payu_order_id' => $order->orderId,
-            'reason' => $warning,
-        ]);
+        $this->logger->error('PayU order was paid, but the Sylius payment cannot be completed. Manual refund may be needed.', ['payment_id' => $payment->getId(), 'payment_state' => $payment->getState(), 'payu_order_id' => $order->orderId, 'reason' => $warning]);
 
         return self::RESULT_WARNING;
     }
