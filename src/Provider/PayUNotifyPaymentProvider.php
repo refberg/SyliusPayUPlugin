@@ -27,18 +27,18 @@ use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
  * Runs before Sylius stores anything, so notifications with a missing or wrong signature
  * are rejected with HTTP 400 and never create a payment request.
  */
-final class PayUNotifyPaymentProvider implements NotifyPaymentProviderInterface
+final readonly class PayUNotifyPaymentProvider implements NotifyPaymentProviderInterface
 {
     /**
      * @param RepositoryInterface<PaymentInterface> $paymentRepository
      * @param PaymentRequestRepositoryInterface<PaymentRequestInterface> $paymentRequestRepository
      */
     public function __construct(
-        private readonly CredentialsResolverInterface $credentialsResolver,
-        private readonly NotificationParser $notificationParser,
-        private readonly ExtOrderIdGenerator $extOrderIdGenerator,
-        private readonly RepositoryInterface $paymentRepository,
-        private readonly PaymentRequestRepositoryInterface $paymentRequestRepository,
+        private CredentialsResolverInterface $credentialsResolver,
+        private NotificationParser $notificationParser,
+        private ExtOrderIdGenerator $extOrderIdGenerator,
+        private RepositoryInterface $paymentRepository,
+        private PaymentRequestRepositoryInterface $paymentRequestRepository,
     ) {
     }
 
@@ -56,12 +56,12 @@ final class PayUNotifyPaymentProvider implements NotifyPaymentProviderInterface
         }
 
         $notification = $this->notificationParser->parse($request->getContent(), $request->headers->all(), $credentials);
-        if (null === $notification) {
+        if (!$notification instanceof Notification) {
             throw new BadRequestHttpException('Invalid PayU notification signature or body.');
         }
 
         $payment = $this->findPayment($notification);
-        if (null === $payment || $payment->getMethod() !== $paymentMethod || !PaymentDetails::of($payment)->hasOrder($notification->orderId)) {
+        if (!$payment instanceof PaymentInterface || $payment->getMethod() !== $paymentMethod || !PaymentDetails::of($payment)->hasOrder($notification->orderId)) {
             throw new NotFoundHttpException('No payment matches this PayU notification.');
         }
 

@@ -19,14 +19,14 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Completed and failed payments are left to the default Sylius flow.
  */
-final class StatusHttpResponseProvider implements HttpResponseProviderInterface
+final readonly class StatusHttpResponseProvider implements HttpResponseProviderInterface
 {
     private const IN_PROGRESS = [
         PayUOrder::STATUS_PENDING,
         PayUOrder::STATUS_WAITING_FOR_CONFIRMATION,
     ];
 
-    public function __construct(private readonly FinalUrlProviderInterface $finalUrlProvider)
+    public function __construct(private FinalUrlProviderInterface $finalUrlProvider)
     {
     }
 

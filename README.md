@@ -183,9 +183,15 @@ refund to PayU. Partial refunds only show up in the payment details, because Syl
 ```bash
 composer install
 vendor/bin/ecs check
+vendor/bin/rector process --dry-run
+vendor/bin/composer-dependency-analyser
+APP_ENV=test vendor/bin/console cache:warmup   # PHPStan reads the compiled test container
 vendor/bin/phpstan analyse
 vendor/bin/phpunit --testsuite=unit
 ```
+
+PHPStan runs at level max with the strict, deprecation, Doctrine, Symfony and PHPUnit rules. CI also checks
+`composer normalize`, `composer audit` and runs mutation tests with Infection (PHP 8.3+, `infection.json5`).
 
 Integration tests run the Sylius test application against MySQL:
 

@@ -54,7 +54,7 @@ final class ExtOrderIdGeneratorTest extends TestCase
         $order = new Order();
         $order->setNumber($number);
 
-        $payment = $this->createMock(PaymentInterface::class);
+        $payment = self::createStub(PaymentInterface::class);
         $payment->method('getId')->willReturn($id);
         $payment->method('getOrder')->willReturn($order);
 
@@ -63,7 +63,7 @@ final class ExtOrderIdGeneratorTest extends TestCase
 
     private function paymentRequest(?string $hash): PaymentRequestInterface
     {
-        $request = $this->createMock(PaymentRequestInterface::class);
+        $request = self::createStub(PaymentRequestInterface::class);
         $request->method('getId')->willReturn($hash);
 
         return $request;

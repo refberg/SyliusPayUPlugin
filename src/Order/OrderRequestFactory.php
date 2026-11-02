@@ -18,7 +18,7 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
  * The order is sent as a single line so the PayU total always matches the payment amount
  * (discounts, shipping and taxes included).
  */
-final class OrderRequestFactory implements OrderRequestFactoryInterface
+final readonly class OrderRequestFactory implements OrderRequestFactoryInterface
 {
     public const PAYLOAD_CONTINUE_URL = 'continue_url';
 
@@ -27,8 +27,8 @@ final class OrderRequestFactory implements OrderRequestFactoryInterface
     private const FALLBACK_CUSTOMER_IP = '127.0.0.1';
 
     public function __construct(
-        private readonly UrlGeneratorInterface $urlGenerator,
-        private readonly ?UrlProviderInterface $afterPayUrlProvider,
+        private UrlGeneratorInterface $urlGenerator,
+        private ?UrlProviderInterface $afterPayUrlProvider,
     ) {
     }
 
@@ -91,7 +91,7 @@ final class OrderRequestFactory implements OrderRequestFactoryInterface
             return $requested;
         }
 
-        if (null === $this->afterPayUrlProvider) {
+        if (!$this->afterPayUrlProvider instanceof UrlProviderInterface) {
             throw new \InvalidArgumentException(sprintf('Payload "%s" is required when the shop is not installed.', self::PAYLOAD_CONTINUE_URL));
         }
 

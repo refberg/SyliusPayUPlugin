@@ -23,15 +23,15 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  * Logs only HTTP status codes, PayU status codes and identifiers. Request bodies, tokens and
  * credentials are never logged nor put into exception messages.
  */
-final class PayUClient implements PayUClientInterface
+final readonly class PayUClient implements PayUClientInterface
 {
     private const STATUS_SUCCESS = 'SUCCESS';
 
     public function __construct(
-        private readonly HttpClientInterface $httpClient,
-        private readonly AccessTokenProviderInterface $accessTokenProvider,
-        private readonly LoggerInterface $logger = new NullLogger(),
-        private readonly float $timeout = 15.0,
+        private HttpClientInterface $httpClient,
+        private AccessTokenProviderInterface $accessTokenProvider,
+        private LoggerInterface $logger = new NullLogger(),
+        private float $timeout = 15.0,
     ) {
     }
 

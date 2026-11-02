@@ -16,18 +16,18 @@ use Symfony\Component\Workflow\Event\CompletedEvent;
  * Turns a completed "sylius_payment" transition of a PayU payment into a payment request
  * (e.g. "refund" → ACTION_REFUND, "cancel" → ACTION_CANCEL) and dispatches it.
  */
-final class PaymentTransitionListener
+final readonly class PaymentTransitionListener
 {
     /**
      * @param PaymentRequestFactoryInterface<PaymentRequestInterface> $paymentRequestFactory
      * @param PaymentRequestRepositoryInterface<PaymentRequestInterface> $paymentRequestRepository
      */
     public function __construct(
-        private readonly CredentialsResolverInterface $credentialsResolver,
-        private readonly PaymentRequestFactoryInterface $paymentRequestFactory,
-        private readonly PaymentRequestRepositoryInterface $paymentRequestRepository,
-        private readonly PaymentRequestAnnouncerInterface $paymentRequestAnnouncer,
-        private readonly string $action,
+        private CredentialsResolverInterface $credentialsResolver,
+        private PaymentRequestFactoryInterface $paymentRequestFactory,
+        private PaymentRequestRepositoryInterface $paymentRequestRepository,
+        private PaymentRequestAnnouncerInterface $paymentRequestAnnouncer,
+        private string $action,
     ) {
     }
 

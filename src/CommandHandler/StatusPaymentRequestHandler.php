@@ -21,17 +21,17 @@ use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
  *
  * The state is taken from GET /orders/{orderId}; query parameters of the return URL are ignored.
  */
-final class StatusPaymentRequestHandler
+final readonly class StatusPaymentRequestHandler
 {
     use PaymentRequestHandlerTrait;
 
     public function __construct(
-        private readonly PaymentRequestProviderInterface $paymentRequestProvider,
-        private readonly CredentialsResolverInterface $credentialsResolver,
-        private readonly PaymentSynchronizer $synchronizer,
-        private readonly PaymentLockerInterface $paymentLocker,
-        private readonly StateMachineInterface $stateMachine,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private PaymentRequestProviderInterface $paymentRequestProvider,
+        private CredentialsResolverInterface $credentialsResolver,
+        private PaymentSynchronizer $synchronizer,
+        private PaymentLockerInterface $paymentLocker,
+        private StateMachineInterface $stateMachine,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 

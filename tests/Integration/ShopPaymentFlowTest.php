@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Integration;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
+use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentRequestTransitions;
 use Symfony\Component\HttpFoundation\Response;
@@ -168,7 +170,7 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
         yield 'pos' => ['merchantPosId', '999999'];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('mismatches')]
+    #[DataProvider('mismatches')]
     public function test_order_that_does_not_match_the_payment_never_pays_it(string $field, string $value): void
     {
         $payment = $this->createPlacedOrder();
@@ -264,7 +266,7 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
     private function finalizeCaptureRequests(string $transition): void
     {
         $stateMachine = static::getContainer()->get('sylius_abstraction.state_machine');
-        self::assertInstanceOf(\Sylius\Abstraction\StateMachine\StateMachineInterface::class, $stateMachine);
+        self::assertInstanceOf(StateMachineInterface::class, $stateMachine);
 
         foreach ($this->paymentRequests(PaymentRequestInterface::ACTION_CAPTURE) as $request) {
             if ($stateMachine->can($request, PaymentRequestTransitions::GRAPH, $transition)) {

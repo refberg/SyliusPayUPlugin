@@ -6,6 +6,7 @@ namespace Tests\Refberg\SyliusPayUPlugin\Integration;
 
 use Doctrine\Common\DataFixtures\Purger\ORMPurger;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ObjectRepository;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\PayUGateway;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfig;
@@ -201,7 +202,7 @@ abstract class IntegrationTestCase extends WebTestCase
     {
         $this->em()->clear();
         $repository = static::getContainer()->get('sylius.repository.payment_request');
-        self::assertInstanceOf(\Doctrine\Persistence\ObjectRepository::class, $repository);
+        self::assertInstanceOf(ObjectRepository::class, $repository);
 
         /** @var list<PaymentRequestInterface> $requests */
         $requests = $repository->findBy(['action' => $action]);

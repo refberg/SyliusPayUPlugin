@@ -26,19 +26,19 @@ use Sylius\Component\Payment\PaymentRequestTransitions;
  *
  * It never completes the payment: only a verified notification or a direct API query can.
  */
-final class CapturePaymentRequestHandler
+final readonly class CapturePaymentRequestHandler
 {
     use PaymentRequestHandlerTrait;
 
     public function __construct(
-        private readonly PaymentRequestProviderInterface $paymentRequestProvider,
-        private readonly CredentialsResolverInterface $credentialsResolver,
-        private readonly PayUClientInterface $client,
-        private readonly OrderRequestFactoryInterface $orderRequestFactory,
-        private readonly ExtOrderIdGenerator $extOrderIdGenerator,
-        private readonly PaymentLockerInterface $paymentLocker,
-        private readonly StateMachineInterface $stateMachine,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private PaymentRequestProviderInterface $paymentRequestProvider,
+        private CredentialsResolverInterface $credentialsResolver,
+        private PayUClientInterface $client,
+        private OrderRequestFactoryInterface $orderRequestFactory,
+        private ExtOrderIdGenerator $extOrderIdGenerator,
+        private PaymentLockerInterface $paymentLocker,
+        private StateMachineInterface $stateMachine,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 

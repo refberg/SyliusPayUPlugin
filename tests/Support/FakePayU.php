@@ -24,7 +24,7 @@ final class FakePayU
 
     public const SECOND_KEY = 'test-second-key';
 
-    /** @var array<string, array<string, string>> */
+    /** @var array<array-key, array<string, string>> */
     private array $orders = [];
 
     /** @var array<array-key, array<string, mixed>> */
@@ -162,7 +162,7 @@ final class FakePayU
      */
     public function orderIds(): array
     {
-        return array_map('strval', array_keys($this->orders));
+        return array_map(strval(...), array_keys($this->orders));
     }
 
     /**

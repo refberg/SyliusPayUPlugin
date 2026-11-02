@@ -183,9 +183,15 @@ wysyłany kolejny zwrot. Zwroty częściowe są widoczne tylko w szczegółach p
 ```bash
 composer install
 vendor/bin/ecs check
+vendor/bin/rector process --dry-run
+vendor/bin/composer-dependency-analyser
+APP_ENV=test vendor/bin/console cache:warmup   # PHPStan korzysta ze skompilowanego kontenera testowego
 vendor/bin/phpstan analyse
 vendor/bin/phpunit --testsuite=unit
 ```
+
+PHPStan działa na poziomie max z regułami strict, deprecation, Doctrine, Symfony i PHPUnit. CI sprawdza też
+`composer normalize` i `composer audit` oraz uruchamia testy mutacyjne Infection (PHP 8.3+, `infection.json5`).
 
 Testy integracyjne uruchamiają aplikację testową Syliusa na MySQL:
 

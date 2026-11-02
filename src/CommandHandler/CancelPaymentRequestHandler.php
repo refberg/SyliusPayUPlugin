@@ -23,17 +23,17 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
  * was cancelled in Sylius (e.g. by an administrator). Without it the customer could still
  * pay a cancelled order.
  */
-final class CancelPaymentRequestHandler
+final readonly class CancelPaymentRequestHandler
 {
     use PaymentRequestHandlerTrait;
 
     public function __construct(
-        private readonly PaymentRequestProviderInterface $paymentRequestProvider,
-        private readonly CredentialsResolverInterface $credentialsResolver,
-        private readonly PayUClientInterface $client,
-        private readonly PaymentLockerInterface $paymentLocker,
-        private readonly StateMachineInterface $stateMachine,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private PaymentRequestProviderInterface $paymentRequestProvider,
+        private CredentialsResolverInterface $credentialsResolver,
+        private PayUClientInterface $client,
+        private PaymentLockerInterface $paymentLocker,
+        private StateMachineInterface $stateMachine,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 

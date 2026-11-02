@@ -2,8 +2,8 @@ name: Build
 
 on:
     push:
-        branches-ignore:
-            - 'dependabot/**'
+        branches:
+            - main
     pull_request: ~
     workflow_dispatch: ~
 
@@ -14,10 +14,74 @@ concurrency:
 permissions:
     contents: read
 
+env:
+    APP_ENV: test
+    DATABASE_URL: "mysql://root@127.0.0.1:3306/refberg_sylius_payu_plugin_test?serverVersion=8.0"
+
 jobs:
+    quality:
+        runs-on: ubuntu-latest
+        name: "Static analysis and coding standard"
+
+        steps:
+            -
+                uses: actions/checkout@v4
+
+            -
+                name: Set up PHP
+                uses: shivammathur/setup-php@v2
+                with:
+                    php-version: "8.3"
+                    extensions: intl, sodium, pdo_mysql
+                    coverage: none
+                    tools: composer:v2, composer-normalize
+
+            -
+                name: Validate composer.json
+                run: composer validate --ansi --strict
+
+            -
+                name: Check composer.json normalization
+                run: composer-normalize --dry-run --diff
+
+            -
+                name: Install dependencies
+                uses: ramsey/composer-install@v3
+
+            -
+                name: Check for known vulnerabilities
+                run: composer audit --locked
+
+            -
+                name: Check dependencies
+                run: vendor/bin/composer-dependency-analyser
+
+            -
+                name: Check coding standard
+                run: vendor/bin/ecs check
+
+            -
+                name: Run Rector
+                run: vendor/bin/rector process --dry-run --no-progress-bar
+
+            -
+                name: Build test container
+                run: vendor/bin/console cache:warmup
+
+            -
+                name: Run PHPStan
+                run: vendor/bin/phpstan analyse --no-progress
+
+            -
+                name: Lint container, YAML and Twig
+                run: |
+                    vendor/bin/console lint:container
+                    vendor/bin/console lint:yaml config translations tests/TestApplication/config
+                    vendor/bin/console lint:twig templates
+
     tests:
         runs-on: ubuntu-latest
-        name: "PHP ${{ matrix.php }}, Sylius ${{ matrix.sylius }}"
+        name: "Tests: PHP ${{ matrix.php }}, Sylius ${{ matrix.sylius }}"
 
         strategy:
             fail-fast: false
@@ -39,10 +103,6 @@ jobs:
                     - 3306:3306
                 options: --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=5s --health-retries=10
 
-        env:
-            APP_ENV: test
-            DATABASE_URL: "mysql://root@127.0.0.1:3306/refberg_sylius_payu_plugin_test?serverVersion=8.0"
-
         steps:
             -
                 uses: actions/checkout@v4
@@ -57,26 +117,16 @@ jobs:
                     tools: composer:v2
 
             -
-                name: Validate composer.json
-                run: composer validate --ansi --strict
-
-            -
                 name: Restrict Sylius version
                 run: composer require --no-update --no-scripts --no-interaction "sylius/sylius:${{ matrix.sylius }}"
 
             -
                 name: Install dependencies
                 uses: ramsey/composer-install@v3
-                with:
-                    composer-options: "--prefer-dist"
 
             -
-                name: Check coding standard
-                run: vendor/bin/ecs check
-
-            -
-                name: Run PHPStan
-                run: vendor/bin/phpstan analyse --no-progress
+                name: Check for known vulnerabilities
+                run: composer audit --locked
 
             -
                 name: Run unit tests
@@ -96,3 +146,28 @@ jobs:
             -
                 name: Run integration tests
                 run: vendor/bin/phpunit --testsuite=integration
+
+    mutation:
+        runs-on: ubuntu-latest
+        name: "Mutation tests"
+
+        steps:
+            -
+                uses: actions/checkout@v4
+
+            -
+                name: Set up PHP
+                uses: shivammathur/setup-php@v2
+                with:
+                    php-version: "8.3"
+                    extensions: intl, sodium
+                    coverage: pcov
+                    tools: composer:v2, infection
+
+            -
+                name: Install dependencies
+                uses: ramsey/composer-install@v3
+
+            -
+                name: Run Infection
+                run: infection --threads=max --no-progress --show-mutations=10

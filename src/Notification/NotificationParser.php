@@ -11,9 +11,9 @@ use Refberg\SyliusPayUPlugin\Signature\SignatureVerifierInterface;
  * Verifies the signature of a PayU notification and extracts its identifiers.
  * Returns null for anything that is not a correctly signed, well-formed notification.
  */
-final class NotificationParser
+final readonly class NotificationParser
 {
-    public function __construct(private readonly SignatureVerifierInterface $signatureVerifier)
+    public function __construct(private SignatureVerifierInterface $signatureVerifier)
     {
     }
 

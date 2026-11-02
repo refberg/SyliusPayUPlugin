@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\Api;
 
+use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Api\AccessTokenProvider;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUApiException;
@@ -93,10 +94,10 @@ final class PayUClientTest extends TestCase
         }
     }
 
-    #[\PHPUnit\Framework\Attributes\TestWith([503])]
-    #[\PHPUnit\Framework\Attributes\TestWith([500])]
-    #[\PHPUnit\Framework\Attributes\TestWith([429])]
-    #[\PHPUnit\Framework\Attributes\TestWith([408])]
+    #[TestWith([503])]
+    #[TestWith([500])]
+    #[TestWith([429])]
+    #[TestWith([408])]
     public function test_temporary_errors_are_transient(int $httpStatus): void
     {
         $this->payu->failNextRequest($httpStatus);

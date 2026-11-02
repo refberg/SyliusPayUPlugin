@@ -270,7 +270,7 @@ final class PaymentDetails
     }
 
     /**
-     * @return array<string, array<string, mixed>>
+     * @return array<array-key, array<string, mixed>>
      */
     public function refunds(): array
     {
@@ -280,7 +280,7 @@ final class PaymentDetails
     }
 
     /**
-     * @return array<string, array<string, mixed>>
+     * @return array<array-key, array<string, mixed>>
      */
     private function orders(): array
     {
@@ -292,7 +292,7 @@ final class PaymentDetails
     /**
      * @param array<array-key, mixed> $items
      *
-     * @return array<string, array<string, mixed>>
+     * @return array<array-key, array<string, mixed>>
      */
     private static function mapOfArrays(array $items): array
     {

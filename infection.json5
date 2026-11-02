@@ -1,0 +1,28 @@
+{
+    // Mutation testing covers the security-relevant logic that has unit tests:
+    // API client, signature, notification parsing, order validation and payment state rules.
+    "source": {
+        "directories": [
+            "src/Api",
+            "src/Config",
+            "src/Notification",
+            "src/Order",
+            "src/Payment",
+            "src/Signature"
+        ],
+        "excludes": [
+            "Payment/PaymentLocker.php"
+        ]
+    },
+    "phpUnit": {
+        "customPath": "vendor/bin/phpunit"
+    },
+    "testFrameworkOptions": "--testsuite=unit",
+    "logs": {
+        "text": "var/infection.log",
+        "github": true
+    },
+    // Initial thresholds; raise them once the first CI runs show the actual scores.
+    "minMsi": 60,
+    "minCoveredMsi": 75
+}

@@ -15,15 +15,15 @@ use Sylius\Component\Payment\Model\PaymentInterface;
 /**
  * Fetches one PayU order from the API, checks it against the payment and applies its state.
  */
-final class PaymentSynchronizer
+final readonly class PaymentSynchronizer
 {
     public const RESULT_INVALID = 'invalid';
 
     public function __construct(
-        private readonly PayUClientInterface $client,
-        private readonly PayUOrderValidator $validator,
-        private readonly PaymentStateApplier $stateApplier,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private PayUClientInterface $client,
+        private PayUOrderValidator $validator,
+        private PaymentStateApplier $stateApplier,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
