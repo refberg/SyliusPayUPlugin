@@ -1,0 +1,14 @@
+imports:
+    - { resource: "@RefbergSyliusPayUPlugin/config/config.yaml" }
+    - { resource: "services_test.php" }
+
+when@test:
+    sylius_payment:
+        encryption:
+            enabled: false
+
+    framework:
+        cache:
+            pools:
+                refberg_payu.cache:
+                    adapter: cache.adapter.array
