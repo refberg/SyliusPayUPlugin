@@ -1,0 +1,3 @@
+refberg_payu:
+    pos_id:
+        invalid: Id punktu płatności może zawierać tylko cyfry.

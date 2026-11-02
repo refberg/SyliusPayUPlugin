@@ -1,0 +1,204 @@
+# Sylius PayU Plugin
+
+[Polska wersja](README.pl.md)
+
+PayU payment gateway for Sylius 2, built on Sylius Payment Requests and the PayU REST API v2.1.
+It does not use Payum.
+
+## Features
+
+- PayU hosted payment page (redirect) in the shop checkout and in the Sylius API.
+- Payment state is changed only by a signed PayU notification or by a direct query to the PayU API.
+  The customer's return from PayU is never treated as proof of payment.
+- Notifications are verified (`OpenPayu-Signature`), then the order is read again from the PayU API
+  and checked against the Sylius payment: PayU order ID, `extOrderId`, POS ID, amount and currency.
+- Duplicated and out-of-order notifications do not change the result and never pay an order twice.
+- Full refunds from the admin panel; refunds made in the PayU panel are synchronized.
+- Cancelling a payment in Sylius cancels the open PayU order.
+- Credentials are stored encrypted by Sylius and are not written to logs.
+
+Out of scope: saved cards, recurring payments, embedded card form, partial refunds started from Sylius.
+
+## Requirements
+
+| Sylius | PHP     |
+|--------|---------|
+| 2.2    | 8.2–8.4 |
+| 2.3    | 8.3–8.4 |
+
+## Installation
+
+1. Install the package:
+
+   ```bash
+   composer require refberg/sylius-payu-plugin
+   ```
+
+2. Register the bundle in `config/bundles.php`, if Symfony Flex did not do it:
+
+   ```php
+   Refberg\SyliusPayUPlugin\RefbergSyliusPayUPlugin::class => ['all' => true],
+   ```
+
+3. Import the configuration in `config/packages/refberg_sylius_payu.yaml`:
+
+   ```yaml
+   imports:
+       - { resource: "@RefbergSyliusPayUPlugin/config/config.yaml" }
+   ```
+
+4. Make sure the Sylius gateway configuration encryption key exists (Sylius generates it during installation):
+
+   ```bash
+   bin/console sylius:payment:generate-key
+   ```
+
+No database migrations are needed. The plugin keeps its data in `sylius_payment.details`.
+
+## Configuration
+
+In the admin panel, go to **Configuration → Payment methods → Create → PayU** and fill in:
+
+| Field                 | PayU panel name                |
+|-----------------------|--------------------------------|
+| Environment           | sandbox or production          |
+| POS ID                | `pos_id`                       |
+| Second key (MD5)      | second key (MD5)               |
+| OAuth client ID       | OAuth protocol – `client_id`     |
+| OAuth client secret   | OAuth protocol – `client_secret` |
+
+The second key and the client secret are never shown again after saving.
+Leave the fields empty to keep the stored values.
+
+The notification URL is sent to PayU with every order, so it does not have to be configured in the PayU panel.
+It is `https://<your-shop>/payment-methods/<PAYMENT_METHOD_CODE>`.
+
+Keep **automatic collection (autoReceive)** enabled for the POS in the PayU panel.
+Orders waiting for manual confirmation (`WAITING_FOR_CONFIRMATION`) stay unpaid in Sylius.
+
+PayU retries a notification until it gets HTTP 200, for up to 72 hours. If your firewall filters incoming traffic,
+allow the PayU notification servers:
+
+- production: 185.68.12.10, 185.68.12.11, 185.68.12.12, 185.68.12.26, 185.68.12.27, 185.68.12.28
+- sandbox: 185.68.14.10, 185.68.14.11, 185.68.14.12, 185.68.14.26, 185.68.14.27, 185.68.14.28
+
+For manual tests you can use the public PLN sandbox POS published in the
+[PayU sandbox documentation](https://developers.payu.com/europe/docs/testing/sandbox/).
+
+If payment requests are processed asynchronously (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` other than `sync://`),
+set `framework.router.default_uri` to the public shop URL, so the notification URL is generated correctly.
+
+## How it works
+
+### Shop
+
+1. The customer places the order and clicks **Pay**. A PayU order is created and the customer is redirected to PayU.
+2. After the payment the customer returns to the shop (`/order/after-pay/{hash}`). The plugin asks the PayU API
+   for the order status. Query parameters added by PayU (e.g. `error=501`) are ignored.
+   While PayU is still processing the payment, the customer sees the thank-you page and the payment stays unpaid.
+3. PayU sends a notification to `/payment-methods/{code}`. The payment is completed or failed based on
+   the order state read from the PayU API.
+
+Opening the pay page again reuses the PayU order that is still in progress, instead of creating a new one.
+
+### API
+
+Create a payment request for a placed order:
+
+```http
+POST /api/v2/shop/orders/{tokenValue}/payment-requests
+Content-Type: application/ld+json
+
+{
+    "paymentId": 123,
+    "paymentMethodCode": "PAYU",
+    "payload": {"continue_url": "https://app.example/payment/return"}
+}
+```
+
+`responseData.redirect_url` contains the PayU payment page. `continue_url` is optional when the shop is installed.
+Without it, the customer returns to the shop's after-pay page.
+
+When the customer is back, ask for the status:
+
+```http
+POST /api/v2/shop/orders/{tokenValue}/payment-requests
+Content-Type: application/ld+json
+
+{"paymentId": 123, "paymentMethodCode": "PAYU", "action": "status"}
+```
+
+`responseData.payment_state` holds the Sylius payment state and `responseData.payu_status` the PayU order status.
+
+### Payment state rules
+
+| PayU order status                      | Sylius payment                                                           |
+|----------------------------------------|--------------------------------------------------------------------------|
+| `NEW`, `PENDING`, `WAITING_FOR_CONFIRMATION` | unchanged (`new`)                                                  |
+| `COMPLETED`                            | `completed`, once                                                        |
+| `CANCELED`                             | `failed`, only when no other PayU order of this payment is still open    |
+
+A payment that is completed is never moved back. If a second PayU order of the same payment is paid
+(for example after the customer retried in another tab), the Sylius order is not paid twice. The plugin
+records a warning in the payment details (`refberg_payu.warnings`) and logs an error on the `payu` channel.
+Refund that payment manually in the PayU panel.
+
+Notifications with a missing or invalid signature get HTTP 400 and are not stored. Notifications for unknown
+orders get HTTP 404. When the PayU API cannot be reached, the endpoint answers with HTTP 5xx, so PayU retries later.
+
+### Refunds
+
+Click **Refund** on a completed PayU payment in the admin panel. The plugin requests a full refund in PayU
+(`extRefundId` is the payment request ID, so retries are not duplicated). The final refund status from the PayU
+notification is stored in the payment details.
+
+Sylius marks the payment as refunded right away, before PayU confirms the refund. If PayU rejects the refund,
+the refund payment request is marked as failed and an error is logged. The refund then has to be handled
+in the PayU panel.
+
+### Cancellation
+
+When a PayU payment is cancelled in Sylius (for example when the order is cancelled), the plugin cancels every
+PayU order of that payment that may still be paid (`DELETE /api/v2_1/orders/{orderId}`). If PayU refuses because
+the order was already paid, the cancel payment request is marked as failed and an error is logged; the later
+COMPLETED notification is recorded as a warning and the payment is not completed.
+
+### Refunds made in the PayU panel
+
+A signed refund notification for a refund that Sylius did not request is recorded in the payment details.
+When finalized refunds cover the whole payment amount, the payment is moved to `refunded` without sending another
+refund to PayU. Partial refunds only show up in the payment details, because Sylius has no state for them.
+
+## Security notes
+
+- Secrets are stored in the gateway configuration, which Sylius encrypts.
+- Secrets and OAuth tokens are never logged or put into payment request data.
+  Exception messages contain only HTTP and PayU status codes.
+- The OAuth token is cached in the `refberg_payu.cache` pool (by default `cache.app`) until shortly before it expires.
+- PayU traffic goes through the `refberg_payu.http_client` service (an alias of `http_client`).
+  You can override it, for example to use a proxy.
+
+## Development
+
+```bash
+composer install
+vendor/bin/ecs check
+vendor/bin/phpstan analyse
+vendor/bin/phpunit --testsuite=unit
+```
+
+Integration tests run the Sylius test application against MySQL:
+
+```bash
+docker run -d --name payu-mysql -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -p 3306:3306 mysql:8.0
+APP_ENV=test vendor/bin/console doctrine:database:create
+APP_ENV=test vendor/bin/console doctrine:schema:create
+vendor/bin/phpunit --testsuite=integration
+```
+
+Tests never call PayU. All requests go to an in-memory fake of the PayU sandbox (`tests/Support/FakePayU.php`),
+which rejects any other host. The tests include signed, duplicated, out-of-order and forged notifications.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

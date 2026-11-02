@@ -4,6 +4,7 @@ parameters:
         - src
         - tests/Unit
         - tests/Support
+        - tests/Integration
 
     excludePaths:
         - tests/TestApplication
