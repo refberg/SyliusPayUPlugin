@@ -26,6 +26,11 @@
         <testsuite name="integration">
             <directory>tests/Integration</directory>
         </testsuite>
+
+        <!-- Manual end-to-end tests against the real PayU sandbox, skipped unless PAYU_SANDBOX=1. -->
+        <testsuite name="sandbox">
+            <directory>tests/Sandbox</directory>
+        </testsuite>
     </testsuites>
 
     <source>

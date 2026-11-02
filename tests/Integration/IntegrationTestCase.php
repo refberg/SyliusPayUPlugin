@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Integration;
 
+use DateTime;
 use Doctrine\Common\DataFixtures\Purger\ORMPurger;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ObjectRepository;
@@ -90,13 +91,7 @@ abstract class IntegrationTestCase extends WebTestCase
         self::assertInstanceOf(GatewayConfigInterface::class, $gatewayConfig);
         $gatewayConfig->setFactoryName(PayUGateway::FACTORY_NAME);
         $gatewayConfig->setGatewayName('payu');
-        $gatewayConfig->setConfig([
-            'environment' => 'sandbox',
-            'pos_id' => FakePayU::POS_ID,
-            'second_key' => FakePayU::SECOND_KEY,
-            'oauth_client_id' => FakePayU::CLIENT_ID,
-            'oauth_client_secret' => FakePayU::CLIENT_SECRET,
-        ]);
+        $gatewayConfig->setConfig(['environment' => 'sandbox'] + $this->payuCredentials());
         if ($gatewayConfig instanceof GatewayConfig) {
             $gatewayConfig->setUsePayum(false);
         }
@@ -127,7 +122,7 @@ abstract class IntegrationTestCase extends WebTestCase
         $order->setState('new');
         $order->setPaymentState('awaiting_payment');
         $order->setCustomerIp('10.0.0.1');
-        $order->setCheckoutCompletedAt(new \DateTime());
+        $order->setCheckoutCompletedAt(new DateTime());
 
         $payment = $this->factory('payment')->createNew();
         self::assertInstanceOf(PaymentInterface::class, $payment);
@@ -144,6 +139,19 @@ abstract class IntegrationTestCase extends WebTestCase
         $em->flush();
 
         return $payment;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function payuCredentials(): array
+    {
+        return [
+            'pos_id' => FakePayU::POS_ID,
+            'second_key' => FakePayU::SECOND_KEY,
+            'oauth_client_id' => FakePayU::CLIENT_ID,
+            'oauth_client_secret' => FakePayU::CLIENT_SECRET,
+        ];
     }
 
     /**
