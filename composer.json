@@ -1,7 +1,8 @@
 {
     "name": "refberg/sylius-payu-plugin",
-    "type": "sylius-plugin",
     "description": "PayU REST API payment gateway for Sylius 2, built on Payment Requests (no Payum).",
+    "license": "MIT",
+    "type": "sylius-plugin",
     "keywords": [
         "sylius",
         "sylius-plugin",
@@ -9,7 +10,6 @@
         "payment",
         "payment-request"
     ],
-    "license": "MIT",
     "authors": [
         {
             "name": "Refberg"
@@ -24,7 +24,7 @@
         "doctrine/orm": "^2.20 || ^3.3",
         "psr/log": "^3.0",
         "sylius/resource-bundle": "^1.12",
-        "sylius/sylius": "^2.2 || ^2.3",
+        "sylius/sylius": "^2.2",
         "symfony/cache-contracts": "^3.4",
         "symfony/config": "^6.4 || ^7.4",
         "symfony/dependency-injection": "^6.4 || ^7.4",
@@ -63,25 +63,7 @@
         "symfony/web-profiler-bundle": "^6.4 || ^7.4",
         "symfony/webpack-encore-bundle": "^2.2"
     },
-    "config": {
-        "sort-packages": true,
-        "allow-plugins": {
-            "dealerdirect/phpcodesniffer-composer-installer": false,
-            "php-http/discovery": false,
-            "phpstan/extension-installer": true,
-            "symfony/flex": true,
-            "symfony/runtime": true
-        }
-    },
-    "extra": {
-        "branch-alias": {
-            "dev-main": "1.0-dev"
-        },
-        "symfony": {
-            "require": "^7.4"
-        },
-        "public-dir": "vendor/sylius/test-application/public"
-    },
+    "prefer-stable": true,
     "autoload": {
         "psr-4": {
             "Refberg\\SyliusPayUPlugin\\": "src/"
@@ -95,7 +77,25 @@
             ]
         }
     },
-    "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": false,
+            "php-http/discovery": false,
+            "phpstan/extension-installer": true,
+            "symfony/flex": true,
+            "symfony/runtime": true
+        },
+        "sort-packages": true
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0-dev"
+        },
+        "public-dir": "vendor/sylius/test-application/public",
+        "symfony": {
+            "require": "^7.4"
+        }
+    },
     "scripts": {
         "database-reset": [
             "vendor/bin/console doctrine:database:drop --force --if-exists",
