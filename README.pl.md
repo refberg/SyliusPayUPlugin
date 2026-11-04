@@ -32,7 +32,7 @@ Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, 
 
 | Sylius | PHP     | Symfony                                 |
 |--------|---------|-----------------------------------------|
-| 2.2    | 8.2–8.4 | 6.4, 7.4                                |
+| 2.2.9+ | 8.2–8.4 | 6.4, 7.4                                |
 | 2.3    | 8.3–8.5 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4+)     |
 
 ## Instalacja
@@ -152,18 +152,34 @@ samej płatności (np. klient ponowił płatność w innej karcie), zamówienie 
 Plugin zapisuje ostrzeżenie w szczegółach płatności (`refberg_payu.warnings`) i loguje błąd na kanale `payu`.
 Taką płatność trzeba zwrócić ręcznie w panelu PayU.
 
+Jeśli klient po przekierowaniu do PayU zmieni w zamówieniu metodę płatności, zamówienie PayU utworzone przed zmianą
+nadal należy do płatności i można je opłacić. Powiadomienie o jego opłaceniu opłaca płatność; plugin zapisuje ostrzeżenie
+`paid_with_previous_payment_method` i loguje ostrzeżenie. Płatność ma już inną metodę, więc zwroty i anulowania tego
+zamówienia z Syliusa mogą do niego nie trafić:
+
+- Inna metoda PayU: zwroty i anulowania z Syliusa są wysyłane z danymi dostępowymi nowej metody. Dla zamówienia
+  z innego POS PayU powinno je odrzucić; żądanie jest wtedy oznaczane jako nieudane, a błąd trafia do logu.
+- Metoda spoza PayU: zwroty i anulowania w Syliusie nie trafiają do PayU. Anulowana płatność zostawia stare zamówienie
+  PayU otwarte; jeśli klient je opłaci, płatność pozostaje anulowana i dostaje ostrzeżenie `payment_completed_after_failure`.
+
+W obu przypadkach zwrot lub anulowanie trzeba zrobić w panelu PayU.
+
 Powiadomienia bez podpisu lub z błędnym podpisem dostają odpowiedź HTTP 400 i nie są zapisywane. Powiadomienia
-dotyczące nieznanych zamówień dostają HTTP 404. Gdy API PayU jest niedostępne, endpoint odpowiada HTTP 5xx,
-więc PayU ponowi powiadomienie później.
+dotyczące nieznanych zamówień dostają HTTP 404. Gdy API PayU jest niedostępne albo odrzuca dane dostępowe pluginu
+(HTTP 401/403), endpoint odpowiada HTTP 5xx, więc PayU ponowi powiadomienie później.
 
 ### Zwroty
 
 Kliknij **Zwrot** przy opłaconej płatności PayU w panelu admina. Plugin zleca w PayU pełny zwrot
-(`extRefundId` to identyfikator żądania płatności, więc ponowienia nie tworzą duplikatów). Końcowy status zwrotu
-z powiadomienia PayU jest zapisywany w szczegółach płatności.
+(`extRefundId` to identyfikator żądania płatności, więc ponownie dostarczone żądanie nie tworzy drugiego zwrotu).
+Końcowy status zwrotu z powiadomienia PayU jest zapisywany w szczegółach płatności.
+
+Zwroty zlecone wcześniej w panelu PayU (poza anulowanymi) są odejmowane od kwoty zwrotu. Gdy pokrywają całą
+płatność, plugin nie wywołuje PayU i oznacza żądanie zwrotu jako zakończone.
 
 Sylius oznacza płatność jako zwróconą od razu, zanim PayU potwierdzi zwrot. Jeśli PayU odrzuci zwrot, żądanie
 zwrotu zostaje oznaczone jako nieudane i zapisywany jest błąd w logu. Wtedy zwrot trzeba obsłużyć w panelu PayU.
+Sylius nie ponawia nieudanego żądania automatycznie, także gdy PayU było niedostępne (timeout, HTTP 5xx).
 
 ### Anulowanie
 
@@ -171,6 +187,8 @@ Gdy płatność PayU zostanie anulowana w Syliusie (np. razem z zamówieniem), p
 zamówienia tej płatności, które mogą jeszcze zostać opłacone (`DELETE /api/v2_1/orders/{orderId}`). Jeśli PayU
 odmówi, bo zamówienie zostało już opłacone, żądanie anulowania jest oznaczane jako nieudane i zapisywany jest błąd
 w logu. Późniejsze powiadomienie COMPLETED zostaje zapisane jako ostrzeżenie, a płatność nie zostaje opłacona.
+Sylius nie ponawia nieudanego żądania anulowania automatycznie, także gdy PayU było niedostępne (timeout, HTTP 5xx);
+sprawdź wtedy zamówienie w panelu PayU.
 
 ### Zwroty zlecone w panelu PayU
 
@@ -181,6 +199,8 @@ wysyłany kolejny zwrot. Zwroty częściowe są widoczne tylko w szczegółach p
 ## Bezpieczeństwo
 
 - Sekrety są przechowywane w konfiguracji bramki, którą Sylius szyfruje.
+- Zwroty i anulowania trafiają do PayU tylko dla płatności już zwróconej lub anulowanej w Syliusie,
+  więc nie da się ich wywołać przez shop API.
 - Sekrety i tokeny OAuth nigdy nie trafiają do logów ani do danych żądań płatności.
   Komunikaty wyjątków zawierają tylko kody HTTP i kody statusu PayU.
 - Token OAuth jest przechowywany w puli cache `refberg_payu.cache` (domyślnie `cache.app`) do chwili tuż przed wygaśnięciem.

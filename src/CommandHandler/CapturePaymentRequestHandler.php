@@ -54,16 +54,16 @@ final readonly class CapturePaymentRequestHandler
         }
 
         $payment = self::corePayment($paymentRequest);
-        if (PaymentInterface::STATE_NEW !== $payment->getState()) {
-            $this->failRequest($paymentRequest, sprintf('Payment in state "%s" cannot be paid.', (string) $payment->getState()));
-
-            return;
-        }
 
         try {
             $method = $paymentRequest->getMethod();
             $credentials = $this->credentialsResolver->resolve($method);
             $this->paymentLocker->lock($payment);
+            if (PaymentInterface::STATE_NEW !== $payment->getState()) {
+                $this->failRequest($paymentRequest, sprintf('Payment in state "%s" cannot be paid.', (string) $payment->getState()));
+
+                return;
+            }
 
             $extOrderId = $this->extOrderIdGenerator->generate($payment, $paymentRequest);
             $orderRequest = $this->orderRequestFactory->create($paymentRequest, $payment, $credentials, $extOrderId);

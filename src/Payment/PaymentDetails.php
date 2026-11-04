@@ -31,6 +31,8 @@ final class PaymentDetails
 
     public const WARNING_LATE_PAYMENT = 'payment_completed_after_failure';
 
+    public const WARNING_PAYMENT_METHOD_CHANGED = 'paid_with_previous_payment_method';
+
     /** @var array<array-key, mixed> */
     private array $data;
 
@@ -263,10 +265,26 @@ final class PaymentDetails
         return $total;
     }
 
+    public function activeRefundAmount(): int
+    {
+        $total = 0;
+        foreach ($this->refunds() as $refund) {
+            $amount = $refund['amount'] ?? 0;
+            if ('CANCELED' !== ($refund['status'] ?? null) && is_int($amount)) {
+                $total += $amount;
+            }
+        }
+
+        return $total;
+    }
+
+    /**
+     * Only refunds requested by Sylius count; refunds made in the PayU panel are covered by activeRefundAmount().
+     */
     public function hasActiveRefund(): bool
     {
         foreach ($this->refunds() as $refund) {
-            if (($refund['status'] ?? null) !== 'CANCELED') {
+            if (true !== ($refund['external'] ?? false) && ($refund['status'] ?? null) !== 'CANCELED') {
                 return true;
             }
         }

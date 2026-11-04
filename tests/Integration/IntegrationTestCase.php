@@ -10,6 +10,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ObjectRepository;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\PayUGateway;
+use Sylius\Bundle\PaymentBundle\Announcer\PaymentRequestAnnouncerInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfig;
 use Sylius\Component\Core\Model\ChannelInterface;
 use Sylius\Component\Core\Model\CustomerInterface;
@@ -18,13 +19,16 @@ use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Currency\Model\CurrencyInterface;
 use Sylius\Component\Locale\Model\LocaleInterface;
+use Sylius\Component\Payment\Factory\PaymentRequestFactoryInterface;
 use Sylius\Component\Payment\Model\GatewayConfigInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
+use Sylius\Component\Payment\Repository\PaymentRequestRepositoryInterface;
 use Sylius\Resource\Factory\FactoryInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
+use function strtolower;
 
 /**
  * Runs the real Sylius test application with the PayU HTTP client replaced by FakePayU.
@@ -82,23 +86,7 @@ abstract class IntegrationTestCase extends WebTestCase
         $channel->addLocale($locale);
         $channel->setTaxCalculationStrategy('order_items_based');
 
-        $gatewayConfig = $this->factory('gateway_config')->createNew();
-        self::assertInstanceOf(GatewayConfigInterface::class, $gatewayConfig);
-        $gatewayConfig->setFactoryName(PayUGateway::FACTORY_NAME);
-        $gatewayConfig->setGatewayName('payu');
-        $gatewayConfig->setConfig(['environment' => 'sandbox'] + $this->payuCredentials());
-        if ($gatewayConfig instanceof GatewayConfig) {
-            $gatewayConfig->setUsePayum(false);
-        }
-
-        $method = $this->factory('payment_method')->createNew();
-        self::assertInstanceOf(PaymentMethodInterface::class, $method);
-        $method->setCode(self::METHOD_CODE);
-        $method->setCurrentLocale('en_US');
-        $method->setFallbackLocale('en_US');
-        $method->setName('PayU');
-        $method->setEnabled(true);
-        $method->setGatewayConfig($gatewayConfig);
+        $method = $this->createPayUMethod(self::METHOD_CODE, FakePayU::POS_ID, FakePayU::SECOND_KEY);
         $method->addChannel($channel);
 
         $customer = $this->factory('customer')->createNew();
@@ -128,12 +116,57 @@ abstract class IntegrationTestCase extends WebTestCase
         $order->addPayment($payment);
 
         $em = $this->em();
-        foreach ([$locale, $currency, $channel, $gatewayConfig, $method, $customer, $order, $payment] as $entity) {
+        foreach ([$locale, $currency, $channel, $customer, $order, $payment] as $entity) {
             $em->persist($entity);
         }
         $em->flush();
 
         return $payment;
+    }
+
+    /**
+     * Creates a PayU payment method that shares the FakePayU OAuth client, persisted but not flushed.
+     */
+    protected function createPayUMethod(string $code, string $posId, string $secondKey): PaymentMethodInterface
+    {
+        $gatewayConfig = $this->factory('gateway_config')->createNew();
+        self::assertInstanceOf(GatewayConfigInterface::class, $gatewayConfig);
+        $gatewayConfig->setFactoryName(PayUGateway::FACTORY_NAME);
+        $gatewayConfig->setGatewayName(strtolower($code));
+        $gatewayConfig->setConfig(['environment' => 'sandbox', 'pos_id' => $posId, 'second_key' => $secondKey] + $this->payuCredentials());
+        if ($gatewayConfig instanceof GatewayConfig) {
+            $gatewayConfig->setUsePayum(false);
+        }
+
+        $method = $this->factory('payment_method')->createNew();
+        self::assertInstanceOf(PaymentMethodInterface::class, $method);
+        $method->setCode($code);
+        $method->setCurrentLocale('en_US');
+        $method->setFallbackLocale('en_US');
+        $method->setName('PayU');
+        $method->setEnabled(true);
+        $method->setGatewayConfig($gatewayConfig);
+
+        $this->em()->persist($gatewayConfig);
+        $this->em()->persist($method);
+
+        return $method;
+    }
+
+    /**
+     * Creates and dispatches a payment request the same way the plugin's payment transition listener does.
+     */
+    protected function dispatchPaymentRequest(PaymentInterface $payment, string $action): void
+    {
+        $payment = $this->reloadPayment($payment);
+        $method = $payment->getMethod();
+        self::assertInstanceOf(PaymentMethodInterface::class, $method);
+
+        $paymentRequest = self::service(PaymentRequestFactoryInterface::class, 'sylius.factory.payment_request')->create($payment, $method);
+        $paymentRequest->setAction($action);
+        self::service(PaymentRequestRepositoryInterface::class, 'sylius.repository.payment_request')->add($paymentRequest);
+
+        self::service(PaymentRequestAnnouncerInterface::class, 'sylius.announcer.payment_request')->dispatchPaymentRequestCommand($paymentRequest);
     }
 
     /**
@@ -165,14 +198,14 @@ abstract class IntegrationTestCase extends WebTestCase
         return (string) $response->headers->get('Location');
     }
 
-    protected function notify(string $body, ?string $signatureHeader): Response
+    protected function notify(string $body, ?string $signatureHeader, string $methodCode = self::METHOD_CODE): Response
     {
         $server = ['CONTENT_TYPE' => 'application/json'];
         if (null !== $signatureHeader) {
             $server['HTTP_OPENPAYU_SIGNATURE'] = $signatureHeader;
         }
 
-        $this->client->request('POST', '/payment-methods/' . self::METHOD_CODE, server: $server, content: $body);
+        $this->client->request('POST', '/payment-methods/' . $methodCode, server: $server, content: $body);
 
         return $this->client->getResponse();
     }
@@ -232,7 +265,7 @@ abstract class IntegrationTestCase extends WebTestCase
     /**
      * @return FactoryInterface<object>
      */
-    private function factory(string $resource): FactoryInterface
+    protected function factory(string $resource): FactoryInterface
     {
         return self::service(FactoryInterface::class, 'sylius.factory.' . $resource);
     }

@@ -71,7 +71,7 @@ final class ApiPaymentFlowTest extends IntegrationTestCase
             'action' => 'refund',
         ]);
 
-        self::assertGreaterThanOrEqual(400, $this->client->getResponse()->getStatusCode());
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->client->getResponse()->getStatusCode());
         self::assertSame([], $this->payu->requests('POST', '#/refunds$#'));
     }
 

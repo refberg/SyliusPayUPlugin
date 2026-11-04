@@ -90,6 +90,30 @@ final class PaymentDetailsTest extends TestCase
         self::assertSame(1300, $details->finalizedRefundAmount());
     }
 
+    public function test_refunds_made_in_the_payu_panel_are_not_an_active_sylius_refund(): void
+    {
+        $details = PaymentDetails::of(new Payment());
+        $details->recordExternalRefund('700', 'PENDING', 500, 'PLN');
+
+        self::assertFalse($details->hasActiveRefund());
+
+        $details->recordRefund('r-1', '501', 'PENDING', 1000, 'PLN');
+
+        self::assertTrue($details->hasActiveRefund());
+    }
+
+    public function test_active_refund_amount_skips_canceled_refunds(): void
+    {
+        $details = PaymentDetails::of(new Payment());
+        self::assertSame(0, $details->activeRefundAmount());
+
+        $details->recordRefund('r-1', '501', 'PENDING', 1000, 'PLN');
+        $details->recordExternalRefund('700', 'FINALIZED', 300, 'PLN');
+        $details->recordExternalRefund('701', 'CANCELED', 200, 'PLN');
+
+        self::assertSame(1300, $details->activeRefundAmount());
+    }
+
     public function test_only_canceled_refunds_are_inactive(): void
     {
         $details = PaymentDetails::of(new Payment());

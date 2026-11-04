@@ -88,7 +88,7 @@ jobs:
             matrix:
                 include:
                     - php: "8.2"
-                      sylius: "~2.2.0"
+                      sylius: "~2.2.9"
                     - php: "8.3"
                       sylius: "~2.3.0"
                     - php: "8.4"

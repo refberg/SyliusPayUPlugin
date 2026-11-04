@@ -14,11 +14,13 @@ use Refberg\SyliusPayUPlugin\Notification\Notification;
 use Refberg\SyliusPayUPlugin\Notification\NotificationParser;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
+use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplier;
 use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Payment\PaymentTransitions;
+use function in_array;
 
 /**
  * Handles a PayU notification stored by Sylius' notify endpoint.
@@ -27,7 +29,7 @@ use Sylius\Component\Payment\PaymentTransitions;
  * then the order state is read from the PayU API, so a stale or replayed notification
  * cannot move the payment backwards.
  *
- * Transient PayU API failures are rethrown: the endpoint answers 5xx and PayU retries.
+ * Transient PayU API failures and rejected plugin credentials are rethrown: the endpoint answers 5xx and PayU retries.
  */
 final readonly class NotifyPaymentRequestHandler
 {
@@ -85,13 +87,25 @@ final readonly class NotifyPaymentRequestHandler
         try {
             $result = $this->synchronizer->synchronize($payment, $notification->orderId, $credentials);
         } catch (PayUApiException $exception) {
-            if ($exception->isTransient()) {
+            // Rejected credentials are fixed by the merchant, so PayU should keep retrying until then.
+            if ($exception->isTransient() || in_array($exception->getHttpStatusCode(), [401, 403], true)) {
                 throw $exception;
             }
 
             $this->failRequest($paymentRequest, $exception->getMessage());
 
             return;
+        }
+
+        if (PaymentStateApplier::RESULT_COMPLETED === $result && $payment->getMethod() !== $method) {
+            // The applier saved its own details; a fresh read keeps completed_order_id.
+            $completedDetails = PaymentDetails::of($payment);
+            $completedDetails->addWarning(PaymentDetails::WARNING_PAYMENT_METHOD_CHANGED, $notification->orderId);
+            $completedDetails->save();
+            $this->logger->warning('PayU paid the payment after the customer switched to another payment method.', [
+                'payment_id' => $payment->getId(),
+                'payu_order_id' => $notification->orderId,
+            ]);
         }
 
         $this->completeRequest($paymentRequest, [
@@ -117,6 +131,7 @@ final readonly class NotifyPaymentRequestHandler
                     'payu_refund_id' => $notification->refundId,
                 ]);
             }
+            $this->refundPaymentWhenCovered($details, $payment);
 
             return;
         }
@@ -157,6 +172,11 @@ final readonly class NotifyPaymentRequestHandler
             'status' => $notification->refundStatus,
         ]);
 
+        $this->refundPaymentWhenCovered($details, $payment);
+    }
+
+    private function refundPaymentWhenCovered(PaymentDetails $details, PaymentInterface $payment): void
+    {
         if (
             $details->finalizedRefundAmount() >= (int) $payment->getAmount() &&
             $this->stateMachine->can($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND)

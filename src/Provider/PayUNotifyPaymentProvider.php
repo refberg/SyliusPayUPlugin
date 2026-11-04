@@ -62,7 +62,7 @@ final readonly class PayUNotifyPaymentProvider implements NotifyPaymentProviderI
         }
 
         $payment = $this->findPayment($notification);
-        if (!$payment instanceof PaymentInterface || $payment->getMethod() !== $paymentMethod || !PaymentDetails::of($payment)->hasOrder($notification->orderId)) {
+        if (!$payment instanceof PaymentInterface || !PaymentDetails::of($payment)->hasOrder($notification->orderId)) {
             throw new NotFoundHttpException('No payment matches this PayU notification.');
         }
 

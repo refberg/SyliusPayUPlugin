@@ -32,7 +32,7 @@ Out of scope: saved cards, recurring payments, embedded card form, partial refun
 
 | Sylius | PHP     | Symfony                          |
 |--------|---------|----------------------------------|
-| 2.2    | 8.2–8.4 | 6.4, 7.4                          |
+| 2.2.9+ | 8.2–8.4 | 6.4, 7.4                          |
 | 2.3    | 8.3–8.5 | 6.4, 7.4, 8.x (8.x needs PHP 8.4+) |
 
 ## Installation
@@ -152,25 +152,43 @@ A payment that is completed is never moved back. If a second PayU order of the s
 records a warning in the payment details (`refberg_payu.warnings`) and logs an error on the `payu` channel.
 Refund that payment manually in the PayU panel.
 
+If the customer switches the order to another payment method after being redirected to PayU, the PayU order
+created before the switch stays linked to the payment and can still be paid. Its notification completes the payment;
+the plugin records the `paid_with_previous_payment_method` warning and logs a warning. Because the payment now has
+another method, refunds and cancellations of that PayU order from Sylius may not reach it:
+
+- Another PayU method: refunds and cancellations from Sylius are sent with the new method's credentials. For an order
+  of another POS PayU is expected to refuse them; the payment request then fails and an error is logged.
+- A method outside PayU: refunds and cancellations in Sylius are not sent to PayU. A cancelled payment keeps the old
+  PayU order open; if the customer pays it, the payment stays cancelled and gets the `payment_completed_after_failure` warning.
+
+In both cases refund or cancel the order in the PayU panel.
+
 Notifications with a missing or invalid signature get HTTP 400 and are not stored. Notifications for unknown
-orders get HTTP 404. When the PayU API cannot be reached, the endpoint answers with HTTP 5xx, so PayU retries later.
+orders get HTTP 404. When the PayU API cannot be reached or rejects the plugin credentials (HTTP 401/403),
+the endpoint answers with HTTP 5xx, so PayU retries later.
 
 ### Refunds
 
 Click **Refund** on a completed PayU payment in the admin panel. The plugin requests a full refund in PayU
-(`extRefundId` is the payment request ID, so retries are not duplicated). The final refund status from the PayU
-notification is stored in the payment details.
+(`extRefundId` is the payment request ID, so a redelivered request does not create a second refund). The final
+refund status from the PayU notification is stored in the payment details.
+
+Refunds already made in the PayU panel (except canceled ones) are subtracted from the requested amount. When they
+cover the whole payment, the plugin does not call PayU and completes the refund payment request.
 
 Sylius marks the payment as refunded right away, before PayU confirms the refund. If PayU rejects the refund,
 the refund payment request is marked as failed and an error is logged. The refund then has to be handled
-in the PayU panel.
+in the PayU panel. Sylius does not retry a failed request automatically, also when PayU was unavailable
+(timeout, HTTP 5xx).
 
 ### Cancellation
 
 When a PayU payment is cancelled in Sylius (for example when the order is cancelled), the plugin cancels every
 PayU order of that payment that may still be paid (`DELETE /api/v2_1/orders/{orderId}`). If PayU refuses because
 the order was already paid, the cancel payment request is marked as failed and an error is logged; the later
-COMPLETED notification is recorded as a warning and the payment is not completed.
+COMPLETED notification is recorded as a warning and the payment is not completed. Sylius does not retry a failed
+cancel request automatically, also when PayU was unavailable (timeout, HTTP 5xx); check the order in the PayU panel.
 
 ### Refunds made in the PayU panel
 
@@ -181,6 +199,8 @@ refund to PayU. Partial refunds only show up in the payment details, because Syl
 ## Security notes
 
 - Secrets are stored in the gateway configuration, which Sylius encrypts.
+- Refunds and cancellations are sent to PayU only for a payment that is already refunded or cancelled in Sylius,
+  so they cannot be triggered through the shop API.
 - Secrets and OAuth tokens are never logged or put into payment request data.
   Exception messages contain only HTTP and PayU status codes.
 - The OAuth token is cached in the `refberg_payu.cache` pool (by default `cache.app`) until shortly before it expires.

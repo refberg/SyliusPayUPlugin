@@ -16,13 +16,14 @@ use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use Sylius\Component\Core\Model\OrderInterface;
+use Sylius\Component\Payment\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use function sprintf;
 
 /**
- * Requests a full refund of the PayU order that paid the payment.
+ * Requests a full refund of the PayU order that paid the payment, less the refunds already made in the PayU panel.
  *
- * extRefundId is the payment request hash, so PayU deduplicates retries of the same request.
+ * extRefundId is the payment request hash, so a redelivered request does not create a second refund in PayU.
  * The final refund status (FINALIZED / CANCELED) arrives later as a signed notification.
  */
 final readonly class RefundPaymentRequestHandler
@@ -58,6 +59,12 @@ final readonly class RefundPaymentRequestHandler
         }
 
         $this->paymentLocker->lock($payment);
+        if (PaymentInterface::STATE_REFUNDED !== $payment->getState()) {
+            $this->failRequest($paymentRequest, sprintf('Payment in state "%s" cannot be refunded.', (string) $payment->getState()));
+
+            return;
+        }
+
         $details = PaymentDetails::of($payment);
 
         $orderId = $details->getCompletedOrderId();
@@ -74,13 +81,24 @@ final readonly class RefundPaymentRequestHandler
             return;
         }
 
+        $amount = (int) $payment->getAmount() - $details->activeRefundAmount();
+        if ($amount <= 0) {
+            $this->logger->info('PayU refund not requested: refunds made in the PayU panel already cover the payment.', [
+                'payment_id' => $payment->getId(),
+                'payu_order_id' => $orderId,
+            ]);
+            $this->completeRequest($paymentRequest, ['order_id' => $orderId, 'covered_by_payu_panel_refunds' => true]);
+
+            return;
+        }
+
         $order = $payment->getOrder();
         $extRefundId = (string) $paymentRequest->getId();
 
         try {
             $refund = $this->client->createRefund($credentials, $orderId, [
                 'description' => sprintf('Refund for order %s', $order instanceof OrderInterface ? (string) $order->getNumber() : ''),
-                'amount' => (int) $payment->getAmount(),
+                'amount' => $amount,
                 'currencyCode' => (string) $payment->getCurrencyCode(),
                 'extRefundId' => $extRefundId,
             ]);
