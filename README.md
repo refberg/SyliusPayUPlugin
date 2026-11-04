@@ -38,6 +38,12 @@ Out of scope: saved cards, recurring payments, embedded card form, partial refun
 The Sylius shop (`SyliusShopBundle`) and admin panel (`SyliusAdminBundle`) are optional, so the plugin also works
 in API-only applications.
 
+The `sylius_payment` state machine must use the Symfony Workflow adapter, which is the Sylius default.
+The plugin sends refunds and cancellations to PayU from listeners of the `workflow.sylius_payment.completed.refund`
+and `workflow.sylius_payment.completed.cancel` events. When `sylius_payment` uses the winzou adapter
+(`winzou_state_machine` in `sylius_state_machine_abstraction.graphs_to_adapters_mapping` or `default_adapter`),
+refunds and cancellations made in Sylius are not sent to PayU and have to be made in the PayU panel.
+
 ## Installation
 
 1. Install the package:
@@ -111,6 +117,72 @@ For manual tests you can use the public PLN sandbox POS published in the
 
 If payment requests are processed asynchronously (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` other than `sync://`),
 set `framework.router.default_uri` to the public shop URL, so the notification URL is generated correctly.
+
+Requests to PayU (OAuth and REST API) use an idle timeout of 15 seconds, set by the `refberg_payu.http_timeout`
+parameter. To change it, set the parameter in the application configuration:
+
+```yaml
+parameters:
+    refberg_payu.http_timeout: 30.0
+```
+
+### Creating the payment method outside the admin panel
+
+A PayU payment method created in fixtures, migrations or code must have `usePayum` set to `false`.
+Sylius sets it to `true` by default; the admin form turns it off by itself for gateways without a Payum factory.
+With `usePayum` set to `true`, the shop hands the payment over to Payum instead of the plugin, so the pay page
+fails (Payum has no gateway for it), and Sylius does not encrypt the gateway configuration.
+
+Fixture (`sylius_fixtures`):
+
+```yaml
+sylius_fixtures:
+    suites:
+        default:
+            fixtures:
+                payment_method:
+                    options:
+                        custom:
+                            payu:
+                                code: PAYU
+                                name: PayU
+                                gatewayName: payu
+                                gatewayFactory: !php/const Refberg\SyliusPayUPlugin\PayUGateway::FACTORY_NAME
+                                gatewayConfig:
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_ENVIRONMENT: sandbox
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_POS_ID: '...'
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_SECOND_KEY: '...'
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_OAUTH_CLIENT_ID: '...'
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_OAUTH_CLIENT_SECRET: '...'
+                                usePayum: false
+                                enabled: true
+                                channels: [FASHION_WEB]
+```
+
+Code, with the `sylius.factory.payment_method` and `sylius.repository.payment_method` services:
+
+```php
+use Refberg\SyliusPayUPlugin\PayUGateway;
+
+$paymentMethod = $paymentMethodFactory->createWithGateway(PayUGateway::FACTORY_NAME);
+$paymentMethod->setCode('PAYU');
+$paymentMethod->setName('PayU');
+$paymentMethod->addChannel($channel);
+
+/** @var \Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface $gatewayConfig */
+$gatewayConfig = $paymentMethod->getGatewayConfig();
+$gatewayConfig->setGatewayName('payu');
+$gatewayConfig->setUsePayum(false);
+$gatewayConfig->setConfig([
+    PayUGateway::CONFIG_ENVIRONMENT => 'sandbox',
+    PayUGateway::CONFIG_POS_ID => '...',
+    PayUGateway::CONFIG_SECOND_KEY => '...',
+    PayUGateway::CONFIG_OAUTH_CLIENT_ID => '...',
+    PayUGateway::CONFIG_OAUTH_CLIENT_SECRET => '...',
+]);
+
+$paymentMethodRepository->add($paymentMethod);
+```
 
 ## How it works
 
