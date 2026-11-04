@@ -18,9 +18,7 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use function in_array;
 use function is_array;
-use function is_int;
 use function is_numeric;
-use function is_string;
 use function mb_substr;
 use function rawurlencode;
 use function sprintf;
@@ -53,15 +51,15 @@ final readonly class PayUClient implements PayUClientInterface
             throw $this->apiError('Creating PayU order failed', $statusCode, $data);
         }
 
-        $orderId = self::stringValue($data, 'orderId');
-        $redirectUri = self::stringValue($data, 'redirectUri');
+        $orderId = Json::string($data, 'orderId');
+        $redirectUri = Json::string($data, 'redirectUri');
         if (null === $orderId || null === $redirectUri || !str_starts_with($redirectUri, 'https://')) {
             throw new PayUApiException('PayU order response is missing orderId or redirectUri.', $statusCode);
         }
 
         $this->logger->info('PayU order created.', ['payu_order_id' => $orderId, 'ext_order_id' => $order['extOrderId'] ?? null]);
 
-        return new OrderCreated($orderId, $redirectUri, self::stringValue($data, 'extOrderId'));
+        return new OrderCreated($orderId, $redirectUri, Json::string($data, 'extOrderId'));
     }
 
     public function retrieveOrder(PayUCredentials $credentials, string $orderId): PayUOrder
@@ -78,24 +76,24 @@ final readonly class PayUClient implements PayUClientInterface
         }
 
         foreach ($orders as $item) {
-            if (!is_array($item) || self::stringValue($item, 'orderId') !== $orderId) {
+            if (!is_array($item) || Json::string($item, 'orderId') !== $orderId) {
                 continue;
             }
 
-            $status = self::stringValue($item, 'status');
+            $status = Json::string($item, 'status');
             $amount = $item['totalAmount'] ?? null;
-            $currency = self::stringValue($item, 'currencyCode');
+            $currency = Json::string($item, 'currencyCode');
             if (null === $status || !is_numeric($amount) || null === $currency) {
                 throw new PayUApiException('PayU order response is incomplete.', $statusCode);
             }
 
             return new PayUOrder(
                 orderId: $orderId,
-                extOrderId: self::stringValue($item, 'extOrderId'),
+                extOrderId: Json::string($item, 'extOrderId'),
                 status: $status,
                 totalAmount: (int) $amount,
                 currencyCode: $currency,
-                merchantPosId: self::stringValue($item, 'merchantPosId'),
+                merchantPosId: Json::string($item, 'merchantPosId'),
             );
         }
 
@@ -131,17 +129,17 @@ final readonly class PayUClient implements PayUClientInterface
             throw new PayUApiException('PayU refund response has no "refund" object.', $statusCode);
         }
 
-        $refundId = self::stringValue($refundData, 'refundId');
-        $status = self::stringValue($refundData, 'status');
+        $refundId = Json::string($refundData, 'refundId');
+        $status = Json::string($refundData, 'status');
         $amount = $refundData['amount'] ?? null;
-        $currency = self::stringValue($refundData, 'currencyCode');
+        $currency = Json::string($refundData, 'currencyCode');
         if (null === $refundId || null === $status || !is_numeric($amount) || null === $currency) {
             throw new PayUApiException('PayU refund response is incomplete.', $statusCode);
         }
 
         $this->logger->info('PayU refund created.', ['payu_order_id' => $orderId, 'payu_refund_id' => $refundId, 'status' => $status]);
 
-        return new RefundCreated($refundId, self::stringValue($refundData, 'extRefundId'), $status, (int) $amount, $currency);
+        return new RefundCreated($refundId, Json::string($refundData, 'extRefundId'), $status, (int) $amount, $currency);
     }
 
     /**
@@ -198,8 +196,8 @@ final readonly class PayUClient implements PayUClientInterface
     {
         $payuStatusCode = self::payuStatusCode($data);
         $status = $data['status'] ?? null;
-        $statusDesc = is_array($status) ? self::stringValue($status, 'statusDesc') : null;
-        $codeLiteral = is_array($status) ? self::stringValue($status, 'codeLiteral') : null;
+        $statusDesc = is_array($status) ? Json::string($status, 'statusDesc') : null;
+        $codeLiteral = is_array($status) ? Json::string($status, 'codeLiteral') : null;
 
         $this->logger->error($message . '.', [
             'http_status' => $statusCode,
@@ -228,19 +226,6 @@ final readonly class PayUClient implements PayUClientInterface
     {
         $status = $data['status'] ?? null;
 
-        return is_array($status) ? self::stringValue($status, 'statusCode') : null;
-    }
-
-    /**
-     * @param array<array-key, mixed> $data
-     */
-    private static function stringValue(array $data, string $key): ?string
-    {
-        $value = $data[$key] ?? null;
-        if (is_int($value)) {
-            $value = (string) $value;
-        }
-
-        return is_string($value) && '' !== $value ? $value : null;
+        return is_array($status) ? Json::string($status, 'statusCode') : null;
     }
 }

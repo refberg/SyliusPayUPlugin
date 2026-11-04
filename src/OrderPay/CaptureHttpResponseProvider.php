@@ -19,7 +19,7 @@ use function str_starts_with;
  *
  * Sylius 2.2 passes a RequestConfiguration, Sylius 2.3 a Request; neither is used.
  */
-final class CaptureHttpResponseProvider implements HttpResponseProviderInterface
+final readonly class CaptureHttpResponseProvider implements HttpResponseProviderInterface
 {
     public function supports(Request|RequestConfiguration $request, PaymentRequestInterface $paymentRequest): bool
     {

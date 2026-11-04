@@ -22,7 +22,7 @@ use function trim;
  * Header format: "sender=checkout;signature=<hex>;algorithm=<MD5|SHA-256|...>;content=DOCUMENT".
  * The expected signature is hash(algorithm, rawBody . secondKey).
  */
-final class SignatureVerifier implements SignatureVerifierInterface
+final readonly class SignatureVerifier implements SignatureVerifierInterface
 {
     public const HEADER_NAMES = ['openpayu-signature', 'x-openpayu-signature'];
 

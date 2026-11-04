@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Refberg\SyliusPayUPlugin\Payment;
 
 use Refberg\SyliusPayUPlugin\Api\Model\PayUOrder;
+use Refberg\SyliusPayUPlugin\Api\Model\RefundCreated;
 use Refberg\SyliusPayUPlugin\PayUGateway;
 use Sylius\Component\Payment\Model\PaymentInterface;
 use function array_reverse;
-use function in_array;
 use function is_array;
 use function is_int;
 use function is_string;
@@ -72,6 +72,9 @@ final class PaymentDetails
         return isset($this->orders()[$orderId]);
     }
 
+    /**
+     * @deprecated since 1.1, will be removed in 2.0.
+     */
     public function findOrderIdByExtOrderId(string $extOrderId): ?string
     {
         foreach ($this->orders() as $orderId => $order) {
@@ -213,7 +216,7 @@ final class PaymentDetails
             }
 
             $current = $refund['status'] ?? null;
-            if (in_array($current, ['FINALIZED', 'CANCELED'], true)) {
+            if (RefundCreated::isFinalStatus(is_string($current) ? $current : null)) {
                 return true;
             }
 
@@ -257,7 +260,7 @@ final class PaymentDetails
         $total = 0;
         foreach ($this->refunds() as $refund) {
             $amount = $refund['amount'] ?? 0;
-            if ('FINALIZED' === ($refund['status'] ?? null) && is_int($amount)) {
+            if (RefundCreated::STATUS_FINALIZED === ($refund['status'] ?? null) && is_int($amount)) {
                 $total += $amount;
             }
         }
@@ -270,7 +273,7 @@ final class PaymentDetails
         $total = 0;
         foreach ($this->refunds() as $refund) {
             $amount = $refund['amount'] ?? 0;
-            if ('CANCELED' !== ($refund['status'] ?? null) && is_int($amount)) {
+            if (RefundCreated::STATUS_CANCELED !== ($refund['status'] ?? null) && is_int($amount)) {
                 $total += $amount;
             }
         }
@@ -284,7 +287,7 @@ final class PaymentDetails
     public function hasActiveRefund(): bool
     {
         foreach ($this->refunds() as $refund) {
-            if (true !== ($refund['external'] ?? false) && ($refund['status'] ?? null) !== 'CANCELED') {
+            if (true !== ($refund['external'] ?? false) && ($refund['status'] ?? null) !== RefundCreated::STATUS_CANCELED) {
                 return true;
             }
         }

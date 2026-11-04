@@ -7,6 +7,7 @@ namespace Refberg\SyliusPayUPlugin\CommandHandler;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUApiException;
+use Refberg\SyliusPayUPlugin\Api\Model\RefundCreated;
 use Refberg\SyliusPayUPlugin\Command\NotifyPaymentRequest;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
 use Refberg\SyliusPayUPlugin\Config\InvalidConfigurationException;
@@ -79,7 +80,7 @@ final readonly class NotifyPaymentRequestHandler
 
         if (Notification::TYPE_REFUND === $notification->type) {
             $this->handleRefund($notification, $details, $payment);
-            $this->completeRequest($paymentRequest, ['type' => 'refund', 'refund_status' => $notification->refundStatus]);
+            $this->completeRequest($paymentRequest, ['type' => Notification::TYPE_REFUND, 'refund_status' => $notification->refundStatus]);
 
             return;
         }
@@ -109,7 +110,7 @@ final readonly class NotifyPaymentRequestHandler
         }
 
         $this->completeRequest($paymentRequest, [
-            'type' => 'order',
+            'type' => Notification::TYPE_ORDER,
             'order_id' => $notification->orderId,
             'result' => $result,
             'payment_state' => $payment->getState(),
@@ -125,7 +126,7 @@ final readonly class NotifyPaymentRequestHandler
         if ($details->updateRefundStatus($notification->refundId, $notification->extRefundId, $notification->refundStatus)) {
             $details->save();
 
-            if ('CANCELED' === $notification->refundStatus) {
+            if (RefundCreated::STATUS_CANCELED === $notification->refundStatus) {
                 $this->logger->error('PayU canceled a refund; it has to be handled manually.', [
                     'payu_order_id' => $notification->orderId,
                     'payu_refund_id' => $notification->refundId,

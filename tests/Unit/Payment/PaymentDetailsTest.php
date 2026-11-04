@@ -20,7 +20,19 @@ final class PaymentDetailsTest extends TestCase
 
         self::assertSame(['THIRD', 'FIRST'], $details->getOpenOrderIds());
         self::assertSame('THIRD', $details->getCurrentOrderId());
+    }
+
+    /**
+     * @deprecated
+     */
+    public function test_order_is_found_by_ext_order_id(): void
+    {
+        $details = PaymentDetails::of(new Payment());
+        $details->addOrder('FIRST', 'ext-1', 1500, 'PLN');
+        $details->addOrder('SECOND', 'ext-2', 1500, 'PLN');
+
         self::assertSame('FIRST', $details->findOrderIdByExtOrderId('ext-1'));
+        self::assertNull($details->findOrderIdByExtOrderId('ext-3'));
     }
 
     public function test_final_order_status_is_never_overwritten(): void

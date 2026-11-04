@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Refberg\SyliusPayUPlugin\Form\Type;
 
 use Refberg\SyliusPayUPlugin\Config\Environment;
+use Refberg\SyliusPayUPlugin\PayUGateway;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\PasswordType;
@@ -28,14 +29,14 @@ use function trim;
  */
 final class PayUGatewayConfigurationType extends AbstractType
 {
-    private const SECRET_FIELDS = ['second_key', 'oauth_client_secret'];
+    private const SECRET_FIELDS = [PayUGateway::CONFIG_SECOND_KEY, PayUGateway::CONFIG_OAUTH_CLIENT_SECRET];
 
     private const GROUPS = ['sylius', 'refberg_payu'];
 
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder
-            ->add('environment', ChoiceType::class, [
+            ->add(PayUGateway::CONFIG_ENVIRONMENT, ChoiceType::class, [
                 'label' => 'refberg_payu.form.gateway_configuration.environment',
                 'choices' => [
                     'refberg_payu.form.gateway_configuration.environment_sandbox' => Environment::Sandbox->value,
@@ -44,24 +45,24 @@ final class PayUGatewayConfigurationType extends AbstractType
                 'empty_data' => Environment::Sandbox->value,
                 'constraints' => [new NotBlank(groups: self::GROUPS)],
             ])
-            ->add('pos_id', TextType::class, [
+            ->add(PayUGateway::CONFIG_POS_ID, TextType::class, [
                 'label' => 'refberg_payu.form.gateway_configuration.pos_id',
                 'constraints' => [
                     new NotBlank(groups: self::GROUPS),
                     new Regex(pattern: '/^\d+$/', message: 'refberg_payu.pos_id.invalid', groups: self::GROUPS),
                 ],
             ])
-            ->add('second_key', PasswordType::class, [
+            ->add(PayUGateway::CONFIG_SECOND_KEY, PasswordType::class, [
                 'label' => 'refberg_payu.form.gateway_configuration.second_key',
                 'help' => 'refberg_payu.form.gateway_configuration.secret_help',
                 'always_empty' => true,
                 'constraints' => [new NotBlank(groups: self::GROUPS)],
             ])
-            ->add('oauth_client_id', TextType::class, [
+            ->add(PayUGateway::CONFIG_OAUTH_CLIENT_ID, TextType::class, [
                 'label' => 'refberg_payu.form.gateway_configuration.oauth_client_id',
                 'constraints' => [new NotBlank(groups: self::GROUPS)],
             ])
-            ->add('oauth_client_secret', PasswordType::class, [
+            ->add(PayUGateway::CONFIG_OAUTH_CLIENT_SECRET, PasswordType::class, [
                 'label' => 'refberg_payu.form.gateway_configuration.oauth_client_secret',
                 'help' => 'refberg_payu.form.gateway_configuration.secret_help',
                 'always_empty' => true,

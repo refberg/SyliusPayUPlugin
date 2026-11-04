@@ -6,6 +6,7 @@
 
 - Support for applications without the Sylius shop (`SyliusShopBundle`) or the admin panel (`SyliusAdminBundle`, `SyliusTwigHooksBundle`). Without the shop, the application must import the payment notification route `@SyliusPaymentBundle/Resources/config/routing/integrations/sylius.yaml`.
 - Service interfaces, which are also the service IDs, for decoration: `Notification\NotificationParserInterface`, `Order\ExtOrderIdGeneratorInterface`, `Order\PayUOrderValidatorInterface`, `Payment\PaymentStateApplierInterface` and `Payment\PaymentSynchronizerInterface` (namespace `Refberg\SyliusPayUPlugin`). The `RESULT_*` constants are defined in `PaymentStateApplierInterface` and `PaymentSynchronizerInterface`.
+- Constants for the gateway configuration keys (`PayUGateway::CONFIG_*`) and the final refund statuses (`RefundCreated::STATUS_FINALIZED`, `RefundCreated::STATUS_CANCELED`, `RefundCreated::isFinalStatus()`).
 
 ### Changed
 
@@ -14,6 +15,7 @@
 ### Deprecated
 
 - Service IDs `Refberg\SyliusPayUPlugin\Notification\NotificationParser`, `Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator`, `Refberg\SyliusPayUPlugin\Order\PayUOrderValidator`, `Refberg\SyliusPayUPlugin\Payment\PaymentStateApplier` and `Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer`; use the corresponding interfaces. The old IDs are aliases and will be removed in 2.0.
+- `Api\Model\PayUOrder::isFinal()` and `Payment\PaymentDetails::findOrderIdByExtOrderId()`, unused by the plugin; they will be removed in 2.0. Use `PayUOrder::isFinalStatus()` instead of `isFinal()`.
 
 ### Fixed
 

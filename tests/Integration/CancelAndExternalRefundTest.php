@@ -134,7 +134,7 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
         self::assertTrue(self::at($requests[0]->getResponseData(), 'covered_by_payu_panel_refunds'));
     }
 
-    public function test_pending_panel_refund_does_not_change_the_payment(): void
+    public function test_canceled_panel_refund_does_not_change_the_payment(): void
     {
         $payment = $this->paidPayment();
         $orderId = $this->payu->lastOrderId();
