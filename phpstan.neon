@@ -2,13 +2,15 @@ parameters:
     level: max
     paths:
         - src
-        - tests/Unit
-        - tests/Support
-        - tests/Integration
-        - tests/HeadlessApplication
+        - tests
+        - config
+        - ecs.php
+        - rector.php
+        - composer-dependency-analyser.php
 
-    excludePaths:
-        - tests/TestApplication
+    # ecs.php uses PHP-CS-Fixer classes, which ECS ships in its own scoped vendor directory.
+    bootstrapFiles:
+        - vendor/symplify/easy-coding-standard/vendor/scoper-autoload.php
 
     # The test container must be compiled first: vendor/bin/console cache:warmup --env=test
     symfony:

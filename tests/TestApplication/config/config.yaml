@@ -3,10 +3,6 @@ imports:
     - { resource: "services_test.php" }
 
 when@test:
-    sylius_payment:
-        encryption:
-            enabled: false
-
     framework:
         cache:
             pools:

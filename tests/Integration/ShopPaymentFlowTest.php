@@ -166,6 +166,22 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
         self::assertSame('new', $this->reloadPayment($payment)->getState());
     }
 
+    public function test_notification_for_a_method_without_credentials_returns_503_so_payu_retries(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+        $this->payu->setOrderStatus($orderId, 'COMPLETED');
+        $this->createPayUMethod('PAYU2', FakePayU::POS_ID, FakePayU::SECOND_KEY)->getGatewayConfig()?->setConfig(['environment' => 'sandbox']);
+        $this->em()->flush();
+        $body = $this->payu->orderNotificationBody($orderId);
+
+        self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $this->notify($body, FakePayU::signatureHeader($body), 'PAYU2')->getStatusCode());
+
+        self::assertSame('new', $this->reloadPayment($payment)->getState());
+        self::assertCount(0, $this->paymentRequests(PaymentRequestInterface::ACTION_NOTIFY));
+    }
+
     /**
      * @return iterable<string, array{string, string}>
      */

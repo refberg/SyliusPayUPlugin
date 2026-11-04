@@ -10,7 +10,7 @@
 
 ### Changed
 
-- Requires `sylius/sylius` 2.2.9 or newer, which limits the payment request actions available to shop API clients.
+- Requires `sylius/sylius` 2.2.12 or newer: 2.2.9 limits the payment request actions available to shop API clients, and 2.2.9 to 2.2.11 have security advisories.
 
 ### Deprecated
 

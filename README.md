@@ -30,10 +30,10 @@ Out of scope: saved cards, recurring payments, embedded card form, partial refun
 
 ## Requirements
 
-| Sylius | PHP     | Symfony                          |
-|--------|---------|----------------------------------|
-| 2.2.9+ | 8.2–8.4 | 6.4, 7.4                          |
-| 2.3    | 8.3–8.5 | 6.4, 7.4, 8.x (8.x needs PHP 8.4+) |
+| Sylius  | PHP     | Symfony                          |
+|---------|---------|----------------------------------|
+| 2.2.12+ | 8.2–8.4 | 6.4, 7.4                          |
+| 2.3     | 8.3–8.5 | 6.4, 7.4, 8.x (8.x needs PHP 8.4+) |
 
 The Sylius shop (`SyliusShopBundle`) and admin panel (`SyliusAdminBundle`) are optional, so the plugin also works
 in API-only applications.
