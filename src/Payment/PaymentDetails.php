@@ -257,28 +257,12 @@ final class PaymentDetails
 
     public function finalizedRefundAmount(): int
     {
-        $total = 0;
-        foreach ($this->refunds() as $refund) {
-            $amount = $refund['amount'] ?? 0;
-            if (RefundCreated::STATUS_FINALIZED === ($refund['status'] ?? null) && is_int($amount)) {
-                $total += $amount;
-            }
-        }
-
-        return $total;
+        return $this->refundAmount(static fn (mixed $status): bool => RefundCreated::STATUS_FINALIZED === $status);
     }
 
     public function activeRefundAmount(): int
     {
-        $total = 0;
-        foreach ($this->refunds() as $refund) {
-            $amount = $refund['amount'] ?? 0;
-            if (RefundCreated::STATUS_CANCELED !== ($refund['status'] ?? null) && is_int($amount)) {
-                $total += $amount;
-            }
-        }
-
-        return $total;
+        return $this->refundAmount(static fn (mixed $status): bool => RefundCreated::STATUS_CANCELED !== $status);
     }
 
     /**
@@ -330,5 +314,21 @@ final class PaymentDetails
         }
 
         return $result;
+    }
+
+    /**
+     * @param callable(mixed): bool $statusFilter
+     */
+    private function refundAmount(callable $statusFilter): int
+    {
+        $total = 0;
+        foreach ($this->refunds() as $refund) {
+            $amount = $refund['amount'] ?? 0;
+            if (is_int($amount) && $statusFilter($refund['status'] ?? null)) {
+                $total += $amount;
+            }
+        }
+
+        return $total;
     }
 }

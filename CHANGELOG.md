@@ -10,7 +10,7 @@
 
 ### Changed
 
-- Requires `sylius/sylius` 2.2.12 or newer: 2.2.9 limits the payment request actions available to shop API clients, and 2.2.9 to 2.2.11 have security advisories.
+- Requires `sylius/sylius` 2.2.12+ or 2.3.2+: 2.2.9 limits the payment request actions available to shop API clients, and the security fixes of 2.2.12 reached the 2.3 line in 2.3.2.
 
 ### Deprecated
 
@@ -21,7 +21,7 @@
 
 - Refund and cancel payment requests reach PayU only for a payment that is already refunded or cancelled in Sylius.
 - A refund from the admin panel after a partial refund in the PayU panel requests the remaining amount; when panel refunds already cover the payment, PayU is not called.
-- A PayU notification for a payment whose method was changed after the redirect to PayU is accepted; the payment is completed with the `paid_with_previous_payment_method` warning.
+- A PayU notification for a payment whose method was changed after the redirect to PayU is accepted; the payment is completed with the PayU method restored and the `paid_with_previous_payment_method` warning, so refunds from Sylius reach PayU.
 - Capture checks the payment state after acquiring the payment lock, so a payment completed in the meantime gets no new PayU order.
 - A notification is answered with HTTP 5xx, so PayU retries it, when the PayU API rejects the plugin credentials (HTTP 401/403).
 - A refund made in the PayU panel that is finalized after a PENDING notification marks the payment as refunded once finalized refunds cover it.

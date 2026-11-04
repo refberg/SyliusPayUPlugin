@@ -33,7 +33,7 @@ Out of scope: saved cards, recurring payments, embedded card form, partial refun
 | Sylius  | PHP     | Symfony                          |
 |---------|---------|----------------------------------|
 | 2.2.12+ | 8.2–8.4 | 6.4, 7.4                          |
-| 2.3     | 8.3–8.5 | 6.4, 7.4, 8.x (8.x needs PHP 8.4+) |
+| 2.3.2+  | 8.3–8.5 | 6.4, 7.4, 8.x (8.x needs PHP 8.4+) |
 
 The Sylius shop (`SyliusShopBundle`) and admin panel (`SyliusAdminBundle`) are optional, so the plugin also works
 in API-only applications.
@@ -242,13 +242,16 @@ Refund that payment manually in the PayU panel.
 
 If the customer switches the order to another payment method after being redirected to PayU, the PayU order
 created before the switch stays linked to the payment and can still be paid. Its notification completes the payment;
-the plugin records the `paid_with_previous_payment_method` warning and logs a warning. Because the payment now has
-another method, refunds and cancellations of that PayU order from Sylius may not reach it:
+the plugin sets the payment method back to the PayU method that was paid, records the `paid_with_previous_payment_method`
+warning and logs a warning. Refunds of that payment from Sylius therefore reach PayU.
 
-- Another PayU method: refunds and cancellations from Sylius are sent with the new method's credentials. For an order
-  of another POS PayU is expected to refuse them; the payment request then fails and an error is logged.
-- A method outside PayU: refunds and cancellations in Sylius are not sent to PayU. A cancelled payment keeps the old
-  PayU order open; if the customer pays it, the payment stays cancelled and gets the `payment_completed_after_failure` warning.
+A payment cancelled in Sylius before the old PayU order is paid still has the new method, so the cancellation may not
+reach that order:
+
+- Another PayU method: the cancellation is sent with the new method's credentials. For an order of another POS PayU
+  is expected to refuse it; the payment request then fails and an error is logged.
+- A method outside PayU: the cancellation is not sent to PayU. The old PayU order stays open; if the customer pays it,
+  the payment stays cancelled and gets the `payment_completed_after_failure` warning.
 
 In both cases refund or cancel the order in the PayU panel.
 

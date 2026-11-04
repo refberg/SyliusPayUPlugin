@@ -33,7 +33,7 @@ Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, 
 | Sylius  | PHP     | Symfony                                 |
 |---------|---------|-----------------------------------------|
 | 2.2.12+ | 8.2–8.4 | 6.4, 7.4                                |
-| 2.3     | 8.3–8.5 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4+)     |
+| 2.3.2+  | 8.3–8.5 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4+)     |
 
 Sklep Syliusa (`SyliusShopBundle`) i panel admina (`SyliusAdminBundle`) są opcjonalne, więc plugin działa także
 w aplikacjach udostępniających tylko API.
@@ -241,14 +241,17 @@ Plugin zapisuje ostrzeżenie w szczegółach płatności (`refberg_payu.warnings
 Taką płatność trzeba zwrócić ręcznie w panelu PayU.
 
 Jeśli klient po przekierowaniu do PayU zmieni w zamówieniu metodę płatności, zamówienie PayU utworzone przed zmianą
-nadal należy do płatności i można je opłacić. Powiadomienie o jego opłaceniu opłaca płatność; plugin zapisuje ostrzeżenie
-`paid_with_previous_payment_method` i loguje ostrzeżenie. Płatność ma już inną metodę, więc zwroty i anulowania tego
-zamówienia z Syliusa mogą do niego nie trafić:
+nadal należy do płatności i można je opłacić. Powiadomienie o jego opłaceniu opłaca płatność; plugin przywraca w płatności
+opłaconą metodę PayU, zapisuje ostrzeżenie `paid_with_previous_payment_method` i loguje ostrzeżenie. Dzięki temu zwroty
+tej płatności z Syliusa trafiają do PayU.
 
-- Inna metoda PayU: zwroty i anulowania z Syliusa są wysyłane z danymi dostępowymi nowej metody. Dla zamówienia
-  z innego POS PayU powinno je odrzucić; żądanie jest wtedy oznaczane jako nieudane, a błąd trafia do logu.
-- Metoda spoza PayU: zwroty i anulowania w Syliusie nie trafiają do PayU. Anulowana płatność zostawia stare zamówienie
-  PayU otwarte; jeśli klient je opłaci, płatność pozostaje anulowana i dostaje ostrzeżenie `payment_completed_after_failure`.
+Płatność anulowana w Syliusie, zanim stare zamówienie PayU zostanie opłacone, ma nadal nową metodę, więc anulowanie
+może do tego zamówienia nie trafić:
+
+- Inna metoda PayU: anulowanie jest wysyłane z danymi dostępowymi nowej metody. Dla zamówienia z innego POS PayU
+  powinno je odrzucić; żądanie jest wtedy oznaczane jako nieudane, a błąd trafia do logu.
+- Metoda spoza PayU: anulowanie nie trafia do PayU. Stare zamówienie PayU zostaje otwarte; jeśli klient je opłaci,
+  płatność pozostaje anulowana i dostaje ostrzeżenie `payment_completed_after_failure`.
 
 W obu przypadkach zwrot lub anulowanie trzeba zrobić w panelu PayU.
 

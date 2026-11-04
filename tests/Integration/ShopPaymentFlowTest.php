@@ -11,6 +11,7 @@ use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentRequestTransitions;
+use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
 use function json_encode;
@@ -330,9 +331,17 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
 
         $payment = $this->reloadPayment($payment);
         self::assertSame('completed', $payment->getState());
+        self::assertSame(self::METHOD_CODE, $payment->getMethod()?->getCode());
         $details = PaymentDetails::of($payment);
         self::assertSame($orderId, $details->getCompletedOrderId());
         self::assertSame([['type' => PaymentDetails::WARNING_PAYMENT_METHOD_CHANGED, 'order_id' => $orderId]], $details->warnings());
+
+        // The restored PayU method lets an admin refund reach PayU.
+        $stateMachine = self::service(StateMachineInterface::class, 'sylius_abstraction.state_machine');
+        $stateMachine->apply($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND);
+        $this->em()->flush();
+
+        self::assertCount(1, $this->payu->requests('POST', '#/orders/' . $orderId . '/refunds$#'));
     }
 
     public function test_notification_for_another_payu_method_never_pays_the_payment(): void

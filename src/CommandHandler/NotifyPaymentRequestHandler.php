@@ -99,13 +99,18 @@ final readonly class NotifyPaymentRequestHandler
         }
 
         if (PaymentStateApplierInterface::RESULT_COMPLETED === $result && $payment->getMethod() !== $method) {
+            // The payment was paid with this PayU method, so refunds and cancellations from Sylius must use it.
+            $previousMethod = $payment->getMethod();
+            $payment->setMethod($method);
+
             // The applier saved its own details; a fresh read keeps completed_order_id.
             $completedDetails = PaymentDetails::of($payment);
             $completedDetails->addWarning(PaymentDetails::WARNING_PAYMENT_METHOD_CHANGED, $notification->orderId);
             $completedDetails->save();
-            $this->logger->warning('PayU paid the payment after the customer switched to another payment method.', [
+            $this->logger->warning('PayU paid the payment after the customer switched to another payment method; the PayU method was restored.', [
                 'payment_id' => $payment->getId(),
                 'payu_order_id' => $notification->orderId,
+                'switched_to_method' => $previousMethod?->getCode(),
             ]);
         }
 
