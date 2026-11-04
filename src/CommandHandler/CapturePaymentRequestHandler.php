@@ -12,7 +12,7 @@ use Refberg\SyliusPayUPlugin\Api\PayUClientInterface;
 use Refberg\SyliusPayUPlugin\Command\CapturePaymentRequest;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
 use Refberg\SyliusPayUPlugin\Config\InvalidConfigurationException;
-use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator;
+use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGeneratorInterface;
 use Refberg\SyliusPayUPlugin\Order\OrderRequestFactoryInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
@@ -37,7 +37,7 @@ final readonly class CapturePaymentRequestHandler
         private CredentialsResolverInterface $credentialsResolver,
         private PayUClientInterface $client,
         private OrderRequestFactoryInterface $orderRequestFactory,
-        private ExtOrderIdGenerator $extOrderIdGenerator,
+        private ExtOrderIdGeneratorInterface $extOrderIdGenerator,
         private PaymentLockerInterface $paymentLocker,
         private StateMachineInterface $stateMachine,
         private LoggerInterface $logger = new NullLogger(),

@@ -23,7 +23,7 @@ use function substr;
  * PayU requires extOrderId to be unique per POS, so every payment attempt gets its own value.
  * The payment ID can be read back from a notification without trusting anything else in it.
  */
-final class ExtOrderIdGenerator
+final class ExtOrderIdGenerator implements ExtOrderIdGeneratorInterface
 {
     private const PATTERN = '/-(\d+)-([0-9a-f]{12})$/';
 

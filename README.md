@@ -223,6 +223,36 @@ refund to PayU. Partial refunds only show up in the payment details, because Syl
 - PayU traffic goes through the `refberg_payu.http_client` service (an alias of `http_client`).
   You can override it, for example to use a proxy.
 
+## Extending
+
+The services below are registered under their interface. Decorate or replace them by the interface:
+
+| Service ID                                                          | Responsibility                                   |
+|---------------------------------------------------------------------|--------------------------------------------------|
+| `Refberg\SyliusPayUPlugin\Api\AccessTokenProviderInterface`         | OAuth token for the PayU API                     |
+| `Refberg\SyliusPayUPlugin\Api\PayUClientInterface`                  | PayU REST API calls                              |
+| `Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface`      | PayU credentials from the gateway configuration  |
+| `Refberg\SyliusPayUPlugin\Signature\SignatureVerifierInterface`     | `OpenPayu-Signature` header verification         |
+| `Refberg\SyliusPayUPlugin\Notification\NotificationParserInterface` | Signed notification parsing                      |
+| `Refberg\SyliusPayUPlugin\Order\OrderRequestFactoryInterface`       | Body of the PayU order request                   |
+| `Refberg\SyliusPayUPlugin\Order\ExtOrderIdGeneratorInterface`       | `extOrderId` values                              |
+| `Refberg\SyliusPayUPlugin\Order\PayUOrderValidatorInterface`        | Check of a PayU order against the Sylius payment |
+| `Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface`           | Payment lock                                     |
+| `Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface`     | Payment state changes                            |
+| `Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface`     | Fetching, checking and applying a PayU order     |
+
+For example, to change the `extOrderId` format:
+
+```yaml
+services:
+    App\Payment\ExtOrderIdGenerator:
+        decorates: Refberg\SyliusPayUPlugin\Order\ExtOrderIdGeneratorInterface
+        arguments: ['@.inner']
+```
+
+`extractPaymentId()` must read the payment ID back from every value returned by `generate()`,
+because notifications are matched to payments by it.
+
 ## Development
 
 ```bash

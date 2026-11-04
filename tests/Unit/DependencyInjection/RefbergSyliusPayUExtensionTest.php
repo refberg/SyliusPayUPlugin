@@ -4,14 +4,26 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\DependencyInjection;
 
+use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\DependencyInjection\RefbergSyliusPayUExtension;
+use Refberg\SyliusPayUPlugin\Notification\NotificationParser;
+use Refberg\SyliusPayUPlugin\Notification\NotificationParserInterface;
+use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator;
+use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGeneratorInterface;
 use Refberg\SyliusPayUPlugin\Order\OrderRequestFactoryInterface;
+use Refberg\SyliusPayUPlugin\Order\PayUOrderValidator;
+use Refberg\SyliusPayUPlugin\Order\PayUOrderValidatorInterface;
 use Refberg\SyliusPayUPlugin\OrderPay\StatusHttpResponseProvider;
+use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplier;
+use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface;
+use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer;
+use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface;
 use Sylius\Bundle\ShopBundle\SyliusShopBundle;
 use Sylius\TwigHooks\DependencyInjection\SyliusTwigHooksExtension;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;
+use function sprintf;
 
 final class RefbergSyliusPayUExtensionTest extends TestCase
 {
@@ -31,6 +43,26 @@ final class RefbergSyliusPayUExtensionTest extends TestCase
 
         self::assertFalse($container->hasDefinition(StatusHttpResponseProvider::class));
         self::assertNull($container->getDefinition(OrderRequestFactoryInterface::class)->getArgument(1));
+    }
+
+    #[TestWith([NotificationParser::class, NotificationParserInterface::class])]
+    #[TestWith([ExtOrderIdGenerator::class, ExtOrderIdGeneratorInterface::class])]
+    #[TestWith([PayUOrderValidator::class, PayUOrderValidatorInterface::class])]
+    #[TestWith([PaymentStateApplier::class, PaymentStateApplierInterface::class])]
+    #[TestWith([PaymentSynchronizer::class, PaymentSynchronizerInterface::class])]
+    public function test_class_service_ids_are_deprecated_aliases_of_the_interface_ids(string $classId, string $interfaceId): void
+    {
+        $container = self::load([]);
+
+        self::assertTrue($container->hasDefinition($interfaceId));
+        $alias = $container->getAlias($classId);
+        self::assertSame($interfaceId, (string) $alias);
+        self::assertTrue($alias->isDeprecated());
+        self::assertSame([
+            'package' => 'refberg/sylius-payu-plugin',
+            'version' => '1.1',
+            'message' => sprintf('The "%s" service alias is deprecated, use "%s" instead.', $classId, $interfaceId),
+        ], $alias->getDeprecation($classId));
     }
 
     public function test_admin_twig_hooks_are_prepended_when_twig_hooks_are_enabled(): void

@@ -18,7 +18,7 @@ use const JSON_THROW_ON_ERROR;
  * Verifies the signature of a PayU notification and extracts its identifiers.
  * Returns null for anything that is not a correctly signed, well-formed notification.
  */
-final readonly class NotificationParser
+final readonly class NotificationParser implements NotificationParserInterface
 {
     public function __construct(private SignatureVerifierInterface $signatureVerifier)
     {

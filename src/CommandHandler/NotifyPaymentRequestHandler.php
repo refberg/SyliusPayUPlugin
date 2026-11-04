@@ -11,11 +11,11 @@ use Refberg\SyliusPayUPlugin\Command\NotifyPaymentRequest;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
 use Refberg\SyliusPayUPlugin\Config\InvalidConfigurationException;
 use Refberg\SyliusPayUPlugin\Notification\Notification;
-use Refberg\SyliusPayUPlugin\Notification\NotificationParser;
+use Refberg\SyliusPayUPlugin\Notification\NotificationParserInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
-use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplier;
-use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer;
+use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface;
+use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -38,8 +38,8 @@ final readonly class NotifyPaymentRequestHandler
     public function __construct(
         private PaymentRequestProviderInterface $paymentRequestProvider,
         private CredentialsResolverInterface $credentialsResolver,
-        private NotificationParser $notificationParser,
-        private PaymentSynchronizer $synchronizer,
+        private NotificationParserInterface $notificationParser,
+        private PaymentSynchronizerInterface $synchronizer,
         private PaymentLockerInterface $paymentLocker,
         private StateMachineInterface $stateMachine,
         private LoggerInterface $logger = new NullLogger(),
@@ -97,7 +97,7 @@ final readonly class NotifyPaymentRequestHandler
             return;
         }
 
-        if (PaymentStateApplier::RESULT_COMPLETED === $result && $payment->getMethod() !== $method) {
+        if (PaymentStateApplierInterface::RESULT_COMPLETED === $result && $payment->getMethod() !== $method) {
             // The applier saved its own details; a fresh read keeps completed_order_id.
             $completedDetails = PaymentDetails::of($payment);
             $completedDetails->addWarning(PaymentDetails::WARNING_PAYMENT_METHOD_CHANGED, $notification->orderId);

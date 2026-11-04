@@ -7,8 +7,8 @@ namespace Refberg\SyliusPayUPlugin\Provider;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
 use Refberg\SyliusPayUPlugin\Config\InvalidConfigurationException;
 use Refberg\SyliusPayUPlugin\Notification\Notification;
-use Refberg\SyliusPayUPlugin\Notification\NotificationParser;
-use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator;
+use Refberg\SyliusPayUPlugin\Notification\NotificationParserInterface;
+use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGeneratorInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Sylius\Bundle\PaymentBundle\Provider\NotifyPaymentProviderInterface;
 use Sylius\Component\Payment\Model\PaymentInterface;
@@ -36,8 +36,8 @@ final readonly class PayUNotifyPaymentProvider implements NotifyPaymentProviderI
      */
     public function __construct(
         private CredentialsResolverInterface $credentialsResolver,
-        private NotificationParser $notificationParser,
-        private ExtOrderIdGenerator $extOrderIdGenerator,
+        private NotificationParserInterface $notificationParser,
+        private ExtOrderIdGeneratorInterface $extOrderIdGenerator,
         private RepositoryInterface $paymentRepository,
         private PaymentRequestRepositoryInterface $paymentRequestRepository,
     ) {

@@ -5,10 +5,15 @@
 ### Added
 
 - Support for applications without the Sylius shop (`SyliusShopBundle`) or the admin panel (`SyliusAdminBundle`, `SyliusTwigHooksBundle`). Without the shop, the application must import the payment notification route `@SyliusPaymentBundle/Resources/config/routing/integrations/sylius.yaml`.
+- Service interfaces, which are also the service IDs, for decoration: `Notification\NotificationParserInterface`, `Order\ExtOrderIdGeneratorInterface`, `Order\PayUOrderValidatorInterface`, `Payment\PaymentStateApplierInterface` and `Payment\PaymentSynchronizerInterface` (namespace `Refberg\SyliusPayUPlugin`). The `RESULT_*` constants are defined in `PaymentStateApplierInterface` and `PaymentSynchronizerInterface`.
 
 ### Changed
 
 - Requires `sylius/sylius` 2.2.9 or newer, which limits the payment request actions available to shop API clients.
+
+### Deprecated
+
+- Service IDs `Refberg\SyliusPayUPlugin\Notification\NotificationParser`, `Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator`, `Refberg\SyliusPayUPlugin\Order\PayUOrderValidator`, `Refberg\SyliusPayUPlugin\Payment\PaymentStateApplier` and `Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer`; use the corresponding interfaces. The old IDs are aliases and will be removed in 2.0.
 
 ### Fixed
 

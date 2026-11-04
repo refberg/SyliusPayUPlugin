@@ -12,7 +12,7 @@ use Sylius\Component\Payment\Model\PaymentInterface;
 /**
  * Checks that an order reported by PayU really belongs to the given Sylius payment.
  */
-final class PayUOrderValidator
+final class PayUOrderValidator implements PayUOrderValidatorInterface
 {
     /**
      * @return list<string> problems found, empty when the order matches
