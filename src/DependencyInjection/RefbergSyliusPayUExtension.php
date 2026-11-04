@@ -7,14 +7,41 @@ namespace Refberg\SyliusPayUPlugin\DependencyInjection;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
+use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
+use function array_key_exists;
 
-final class RefbergSyliusPayUExtension extends Extension
+final class RefbergSyliusPayUExtension extends Extension implements PrependExtensionInterface
 {
     public function load(array $configs, ContainerBuilder $container): void
     {
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../../config'));
         $loader->load('services.php');
+
+        /** @var array<string, class-string> $bundles */
+        $bundles = $container->getParameter('kernel.bundles');
+        if (array_key_exists('SyliusShopBundle', $bundles)) {
+            $loader->load('services/integrations/sylius_shop.php');
+        }
+    }
+
+    public function prepend(ContainerBuilder $container): void
+    {
+        if (!$container->hasExtension('sylius_twig_hooks')) {
+            return;
+        }
+
+        $gatewayConfiguration = [
+            'refberg_payu' => [
+                'template' => '@RefbergSyliusPayUPlugin/admin/payment_method/gateway_configuration.html.twig',
+                'priority' => 0,
+            ],
+        ];
+        // Prepended, so the application configuration can still override the plugin hooks.
+        $container->prependExtensionConfig('sylius_twig_hooks', ['hooks' => [
+            'sylius_admin.payment_method.create.content.form.sections.gateway_configuration.refberg_payu' => $gatewayConfiguration,
+            'sylius_admin.payment_method.update.content.form.sections.gateway_configuration.refberg_payu' => $gatewayConfiguration,
+        ]]);
     }
 
     public function getAlias(): string

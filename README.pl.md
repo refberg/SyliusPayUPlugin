@@ -35,6 +35,9 @@ Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, 
 | 2.2.9+ | 8.2–8.4 | 6.4, 7.4                                |
 | 2.3    | 8.3–8.5 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4+)     |
 
+Sklep Syliusa (`SyliusShopBundle`) i panel admina (`SyliusAdminBundle`) są opcjonalne, więc plugin działa także
+w aplikacjach udostępniających tylko API.
+
 ## Instalacja
 
 1. Zainstaluj pakiet:
@@ -61,6 +64,18 @@ Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, 
    ```bash
    bin/console sylius:payment:generate-key
    ```
+
+5. Tylko w aplikacjach bez sklepu Syliusa: zaimportuj trasę powiadomień o płatności, którą Sylius importuje
+   zwykle razem z trasami sklepu, w `config/routes/sylius_payment.yaml`:
+
+   ```yaml
+   sylius_payment_notify:
+       resource: "@SyliusPaymentBundle/Resources/config/routing/integrations/sylius.yaml"
+   ```
+
+   Bez tej trasy żądania capture kończą się błędem, a PayU nie może dostarczyć powiadomień. W aplikacji z panelem admina
+   nie da się też wyświetlić strony edycji metody płatności PayU, bo pokazuje ona adres powiadomień.
+   Klienci API muszą też przesyłać `continue_url` w payloadzie capture (zobacz [API](#api)).
 
 Migracje bazy danych nie są potrzebne. Plugin trzyma swoje dane w `sylius_payment.details`.
 
@@ -126,7 +141,8 @@ Content-Type: application/ld+json
 ```
 
 `responseData.redirect_url` zawiera adres strony płatności PayU. `continue_url` jest opcjonalne, jeśli sklep jest zainstalowany.
-Bez niego klient wraca na stronę after-pay sklepu.
+Bez niego klient wraca na stronę after-pay sklepu. Bez sklepu żądanie capture bez `continue_url` kończy się błędem,
+a PayU nie jest wywoływane.
 
 Po powrocie klienta zapytaj o status:
 

@@ -5,6 +5,7 @@ parameters:
         - tests/Unit
         - tests/Support
         - tests/Integration
+        - tests/HeadlessApplication
 
     excludePaths:
         - tests/TestApplication

@@ -29,7 +29,6 @@ use Refberg\SyliusPayUPlugin\Order\OrderRequestFactory;
 use Refberg\SyliusPayUPlugin\Order\OrderRequestFactoryInterface;
 use Refberg\SyliusPayUPlugin\Order\PayUOrderValidator;
 use Refberg\SyliusPayUPlugin\OrderPay\CaptureHttpResponseProvider;
-use Refberg\SyliusPayUPlugin\OrderPay\StatusHttpResponseProvider;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLocker;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplier;
@@ -74,7 +73,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(ExtOrderIdGenerator::class);
     $services->set(PayUOrderValidator::class);
     $services->set(OrderRequestFactoryInterface::class, OrderRequestFactory::class)
-        ->args([service('router'), service('sylius_shop.provider.order_pay.after_pay_url')->nullOnInvalid()]);
+        ->args([service('router'), null]);
 
     $services->set(PaymentLockerInterface::class, PaymentLocker::class)
         ->args([service('doctrine.orm.entity_manager')]);
@@ -203,10 +202,6 @@ return static function (ContainerConfigurator $container): void {
     $services->set(CaptureHttpResponseProvider::class)
         ->tag('refberg_payu.http_response_provider', ['action' => PaymentRequestInterface::ACTION_CAPTURE])
         ->tag('refberg_payu.http_response_provider', ['action' => PaymentRequestInterface::ACTION_AUTHORIZE]);
-
-    $services->set(StatusHttpResponseProvider::class)
-        ->args([service('sylius_shop.provider.order_pay.final_url')])
-        ->tag('refberg_payu.http_response_provider', ['action' => PaymentRequestInterface::ACTION_STATUS]);
 
     // Refunds and cancellations from the admin panel
     $transitionActions = [

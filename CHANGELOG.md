@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support for applications without the Sylius shop (`SyliusShopBundle`) or the admin panel (`SyliusAdminBundle`, `SyliusTwigHooksBundle`). Without the shop, the application must import the payment notification route `@SyliusPaymentBundle/Resources/config/routing/integrations/sylius.yaml`.
+
 ### Changed
 
 - Requires `sylius/sylius` 2.2.9 or newer, which limits the payment request actions available to shop API clients.
@@ -14,6 +18,11 @@
 - Capture checks the payment state after acquiring the payment lock, so a payment completed in the meantime gets no new PayU order.
 - A notification is answered with HTTP 5xx, so PayU retries it, when the PayU API rejects the plugin credentials (HTTP 401/403).
 - A refund made in the PayU panel that is finalized after a PENDING notification marks the payment as refunded once finalized refunds cover it.
+
+### Removed
+
+- `Refberg\SyliusPayUPlugin\DependencyInjection\Compiler\RemoveShopServicesPass`; shop services are registered only when `SyliusShopBundle` is enabled.
+- `config/twig_hooks/admin.yaml`; the admin Twig hooks are registered by the plugin extension when `SyliusTwigHooksBundle` is enabled.
 
 ## 1.0.0 (2026-11-02)
 

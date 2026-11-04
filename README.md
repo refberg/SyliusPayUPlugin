@@ -35,6 +35,9 @@ Out of scope: saved cards, recurring payments, embedded card form, partial refun
 | 2.2.9+ | 8.2–8.4 | 6.4, 7.4                          |
 | 2.3    | 8.3–8.5 | 6.4, 7.4, 8.x (8.x needs PHP 8.4+) |
 
+The Sylius shop (`SyliusShopBundle`) and admin panel (`SyliusAdminBundle`) are optional, so the plugin also works
+in API-only applications.
+
 ## Installation
 
 1. Install the package:
@@ -61,6 +64,18 @@ Out of scope: saved cards, recurring payments, embedded card form, partial refun
    ```bash
    bin/console sylius:payment:generate-key
    ```
+
+5. Applications without the Sylius shop only: import the payment notification route, which Sylius otherwise imports
+   together with the shop routes, in `config/routes/sylius_payment.yaml`:
+
+   ```yaml
+   sylius_payment_notify:
+       resource: "@SyliusPaymentBundle/Resources/config/routing/integrations/sylius.yaml"
+   ```
+
+   Without this route, capture requests fail and PayU cannot deliver notifications. In an application with the admin panel,
+   the edit page of a PayU payment method cannot be rendered either, because it shows the notification URL.
+   API clients must also send `continue_url` in the capture payload (see [API](#api)).
 
 No database migrations are needed. The plugin keeps its data in `sylius_payment.details`.
 
@@ -126,7 +141,8 @@ Content-Type: application/ld+json
 ```
 
 `responseData.redirect_url` contains the PayU payment page. `continue_url` is optional when the shop is installed.
-Without it, the customer returns to the shop's after-pay page.
+Without it, the customer returns to the shop's after-pay page. Without the shop, a capture request without
+`continue_url` fails and PayU is not called.
 
 When the customer is back, ask for the status:
 

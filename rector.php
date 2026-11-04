@@ -14,8 +14,6 @@ return RectorConfig::configure()
         __DIR__ . '/tests/TestApplication',
         // Private static helpers are intentional.
         Rector\CodeQuality\Rector\ClassMethod\LocallyCalledStaticMethodToNonStaticRector::class,
-        // Only spells out default arguments of addCompilerPass().
-        Rector\Arguments\Rector\ClassMethod\ArgumentAdderRector::class => [__DIR__ . '/src/RefbergSyliusPayUPlugin.php'],
     ])
     // PHP 8.2 is the lowest supported version, so no newer syntax is introduced.
     ->withPhpSets(php82: true)

@@ -28,7 +28,11 @@ use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
+use function is_array;
+use function json_decode;
+use function json_encode;
 use function strtolower;
+use const JSON_THROW_ON_ERROR;
 
 /**
  * Runs the real Sylius test application with the PayU HTTP client replaced by FakePayU.
@@ -196,6 +200,25 @@ abstract class IntegrationTestCase extends WebTestCase
         self::assertSame(Response::HTTP_SEE_OTHER, $response->getStatusCode(), (string) $response->getContent());
 
         return (string) $response->headers->get('Location');
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     *
+     * @return array<array-key, mixed>
+     */
+    protected function postPaymentRequest(array $body): array
+    {
+        $this->client->request(
+            'POST',
+            '/api/v2/shop/orders/order-token/payment-requests',
+            server: ['CONTENT_TYPE' => 'application/ld+json', 'HTTP_ACCEPT' => 'application/ld+json'],
+            content: json_encode($body, JSON_THROW_ON_ERROR),
+        );
+
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        return is_array($data) ? $data : [];
     }
 
     protected function notify(string $body, ?string $signatureHeader, string $methodCode = self::METHOD_CODE): Response
