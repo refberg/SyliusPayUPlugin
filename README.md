@@ -241,9 +241,11 @@ records a warning in the payment details (`refberg_payu.warnings`) and logs an e
 Refund that payment manually in the PayU panel.
 
 If the customer switches the order to another payment method after being redirected to PayU, the PayU order
-created before the switch stays linked to the payment and can still be paid. Its notification completes the payment;
-the plugin sets the payment method back to the PayU method that was paid, records the `paid_with_previous_payment_method`
-warning and logs a warning. Refunds of that payment from Sylius therefore reach PayU.
+created before the switch stays linked to the payment and can still be paid. The payment is completed by its notification
+or by a status check (the customer's return from PayU or the `status` payment request through the API) once
+the PayU API confirms the order is paid; the plugin sets the payment method back to the PayU method that was paid,
+records the `paid_with_previous_payment_method` warning and logs a warning. Refunds of that payment from Sylius
+therefore reach PayU.
 
 A payment cancelled in Sylius before the old PayU order is paid still has the new method, so the cancellation may not
 reach that order:
@@ -267,6 +269,10 @@ refund status from the PayU notification is stored in the payment details.
 
 Refunds already made in the PayU panel (except canceled ones) are subtracted from the requested amount. When they
 cover the whole payment, the plugin does not call PayU and completes the refund payment request.
+
+Panel refunds still in progress are subtracted as well. If PayU cancels such a refund after the refund from Sylius,
+the customer gets back only the amount sent to PayU (nothing when the panel refunds covered the whole payment).
+The payment stays `refunded` and the plugin logs an error; refund the rest manually in the PayU panel.
 
 Sylius marks the payment as refunded right away, before PayU confirms the refund. If PayU rejects the refund,
 the refund payment request is marked as failed and an error is logged. The refund then has to be handled

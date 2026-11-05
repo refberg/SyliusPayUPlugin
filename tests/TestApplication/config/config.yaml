@@ -3,6 +3,9 @@ imports:
     - { resource: "services_test.php" }
 
 when@test:
+    ux_icons:
+        iconify:
+            enabled: false
     framework:
         cache:
             pools:

@@ -241,9 +241,10 @@ Plugin zapisuje ostrzeżenie w szczegółach płatności (`refberg_payu.warnings
 Taką płatność trzeba zwrócić ręcznie w panelu PayU.
 
 Jeśli klient po przekierowaniu do PayU zmieni w zamówieniu metodę płatności, zamówienie PayU utworzone przed zmianą
-nadal należy do płatności i można je opłacić. Powiadomienie o jego opłaceniu opłaca płatność; plugin przywraca w płatności
-opłaconą metodę PayU, zapisuje ostrzeżenie `paid_with_previous_payment_method` i loguje ostrzeżenie. Dzięki temu zwroty
-tej płatności z Syliusa trafiają do PayU.
+nadal należy do płatności i można je opłacić. Płatność opłaca powiadomienie albo sprawdzenie statusu (powrót klienta
+z PayU lub żądanie płatności `status` przez API), gdy API PayU potwierdzi opłacenie zamówienia; plugin przywraca
+w płatności opłaconą metodę PayU, zapisuje ostrzeżenie `paid_with_previous_payment_method` i loguje ostrzeżenie.
+Dzięki temu zwroty tej płatności z Syliusa trafiają do PayU.
 
 Płatność anulowana w Syliusie, zanim stare zamówienie PayU zostanie opłacone, ma nadal nową metodę, więc anulowanie
 może do tego zamówienia nie trafić:
@@ -267,6 +268,10 @@ Końcowy status zwrotu z powiadomienia PayU jest zapisywany w szczegółach pła
 
 Zwroty zlecone wcześniej w panelu PayU (poza anulowanymi) są odejmowane od kwoty zwrotu. Gdy pokrywają całą
 płatność, plugin nie wywołuje PayU i oznacza żądanie zwrotu jako zakończone.
+
+Odejmowane są też zwroty z panelu, które są jeszcze w toku. Jeśli PayU anuluje taki zwrot już po zwrocie z Syliusa,
+klient dostaje tylko kwotę wysłaną do PayU (nic, gdy zwroty z panelu pokrywały całą płatność). Płatność zostaje
+`refunded`, a plugin loguje błąd; resztę trzeba zwrócić ręcznie w panelu PayU.
 
 Sylius oznacza płatność jako zwróconą od razu, zanim PayU potwierdzi zwrot. Jeśli PayU odrzuci zwrot, żądanie
 zwrotu zostaje oznaczone jako nieudane i zapisywany jest błąd w logu. Wtedy zwrot trzeba obsłużyć w panelu PayU.
