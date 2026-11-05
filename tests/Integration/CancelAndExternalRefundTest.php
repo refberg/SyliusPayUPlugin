@@ -36,6 +36,22 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
         self::assertSame('cancelled', $this->reloadPayment($payment)->getState());
     }
 
+    public function test_cancel_request_for_a_payment_that_was_not_cancelled_in_sylius_keeps_the_payu_order_open(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+
+        $this->dispatchPaymentRequest($payment, PaymentRequestInterface::ACTION_CANCEL);
+
+        self::assertSame([], $this->payu->requests('DELETE'));
+        self::assertSame('NEW', $this->payu->order($orderId)['status']);
+        $requests = $this->paymentRequests(PaymentRequestInterface::ACTION_CANCEL);
+        self::assertCount(1, $requests);
+        self::assertSame(PaymentRequestInterface::STATE_FAILED, $requests[0]->getState());
+        self::assertSame('new', $this->reloadPayment($payment)->getState());
+    }
+
     public function test_payment_completed_before_the_cancel_reached_payu_is_flagged(): void
     {
         $payment = $this->createPlacedOrder();
@@ -69,6 +85,10 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
         // Sylius must not ask PayU for a second refund.
         self::assertSame([], $this->payu->requests('POST', '#/refunds$#'));
         self::assertSame(1500, $this->details($payment)->finalizedRefundAmount());
+        $requests = $this->paymentRequests(PaymentRequestInterface::ACTION_REFUND);
+        self::assertCount(1, $requests);
+        self::assertSame(PaymentRequestInterface::STATE_COMPLETED, $requests[0]->getState());
+        self::assertTrue(self::at($requests[0]->getResponseData(), 'covered_by_payu_panel_refunds'));
     }
 
     public function test_partial_refund_made_in_payu_panel_is_only_recorded(): void
@@ -91,7 +111,30 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
         self::assertSame([], $this->payu->requests('POST', '#/refunds$#'));
     }
 
-    public function test_pending_panel_refund_does_not_change_the_payment(): void
+    public function test_panel_refund_finalized_after_a_pending_notification_marks_the_payment_refunded(): void
+    {
+        $payment = $this->paidPayment();
+        $orderId = $this->payu->lastOrderId();
+        $refundId = $this->payu->createPanelRefund($orderId, 1500);
+
+        $pending = $this->payu->refundNotificationBody($orderId, $refundId, 'PENDING');
+        self::assertSame(Response::HTTP_OK, $this->notify($pending, FakePayU::signatureHeader($pending))->getStatusCode());
+        self::assertSame('completed', $this->reloadPayment($payment)->getState());
+
+        $finalized = $this->payu->refundNotificationBody($orderId, $refundId, 'FINALIZED');
+        self::assertSame(Response::HTTP_OK, $this->notify($finalized, FakePayU::signatureHeader($finalized))->getStatusCode());
+        self::assertSame(Response::HTTP_OK, $this->notify($finalized, FakePayU::signatureHeader($finalized))->getStatusCode());
+
+        self::assertSame('refunded', $this->reloadPayment($payment)->getState());
+        self::assertSame(1500, $this->details($payment)->finalizedRefundAmount());
+        self::assertSame([], $this->payu->requests('POST', '#/refunds$#'));
+        $requests = $this->paymentRequests(PaymentRequestInterface::ACTION_REFUND);
+        self::assertCount(1, $requests);
+        self::assertSame(PaymentRequestInterface::STATE_COMPLETED, $requests[0]->getState());
+        self::assertTrue(self::at($requests[0]->getResponseData(), 'covered_by_payu_panel_refunds'));
+    }
+
+    public function test_canceled_panel_refund_does_not_change_the_payment(): void
     {
         $payment = $this->paidPayment();
         $orderId = $this->payu->lastOrderId();

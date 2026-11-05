@@ -7,18 +7,21 @@ namespace Refberg\SyliusPayUPlugin\CommandHandler;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUApiException;
+use Refberg\SyliusPayUPlugin\Api\Model\RefundCreated;
 use Refberg\SyliusPayUPlugin\Command\NotifyPaymentRequest;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
 use Refberg\SyliusPayUPlugin\Config\InvalidConfigurationException;
 use Refberg\SyliusPayUPlugin\Notification\Notification;
-use Refberg\SyliusPayUPlugin\Notification\NotificationParser;
+use Refberg\SyliusPayUPlugin\Notification\NotificationParserInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
-use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer;
+use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface;
+use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Payment\PaymentTransitions;
+use function in_array;
 
 /**
  * Handles a PayU notification stored by Sylius' notify endpoint.
@@ -27,7 +30,7 @@ use Sylius\Component\Payment\PaymentTransitions;
  * then the order state is read from the PayU API, so a stale or replayed notification
  * cannot move the payment backwards.
  *
- * Transient PayU API failures are rethrown: the endpoint answers 5xx and PayU retries.
+ * Transient PayU API failures and rejected plugin credentials are rethrown: the endpoint answers 5xx and PayU retries.
  */
 final readonly class NotifyPaymentRequestHandler
 {
@@ -36,8 +39,8 @@ final readonly class NotifyPaymentRequestHandler
     public function __construct(
         private PaymentRequestProviderInterface $paymentRequestProvider,
         private CredentialsResolverInterface $credentialsResolver,
-        private NotificationParser $notificationParser,
-        private PaymentSynchronizer $synchronizer,
+        private NotificationParserInterface $notificationParser,
+        private PaymentSynchronizerInterface $synchronizer,
         private PaymentLockerInterface $paymentLocker,
         private StateMachineInterface $stateMachine,
         private LoggerInterface $logger = new NullLogger(),
@@ -77,7 +80,7 @@ final readonly class NotifyPaymentRequestHandler
 
         if (Notification::TYPE_REFUND === $notification->type) {
             $this->handleRefund($notification, $details, $payment);
-            $this->completeRequest($paymentRequest, ['type' => 'refund', 'refund_status' => $notification->refundStatus]);
+            $this->completeRequest($paymentRequest, ['type' => Notification::TYPE_REFUND, 'refund_status' => $notification->refundStatus]);
 
             return;
         }
@@ -85,7 +88,8 @@ final readonly class NotifyPaymentRequestHandler
         try {
             $result = $this->synchronizer->synchronize($payment, $notification->orderId, $credentials);
         } catch (PayUApiException $exception) {
-            if ($exception->isTransient()) {
+            // Rejected credentials are fixed by the merchant, so PayU should keep retrying until then.
+            if ($exception->isTransient() || in_array($exception->getHttpStatusCode(), [401, 403], true)) {
                 throw $exception;
             }
 
@@ -94,8 +98,12 @@ final readonly class NotifyPaymentRequestHandler
             return;
         }
 
+        if (PaymentStateApplierInterface::RESULT_COMPLETED === $result) {
+            $this->restorePaidMethod($payment, $method, $notification->orderId);
+        }
+
         $this->completeRequest($paymentRequest, [
-            'type' => 'order',
+            'type' => Notification::TYPE_ORDER,
             'order_id' => $notification->orderId,
             'result' => $result,
             'payment_state' => $payment->getState(),
@@ -111,12 +119,13 @@ final readonly class NotifyPaymentRequestHandler
         if ($details->updateRefundStatus($notification->refundId, $notification->extRefundId, $notification->refundStatus)) {
             $details->save();
 
-            if ('CANCELED' === $notification->refundStatus) {
+            if (RefundCreated::STATUS_CANCELED === $notification->refundStatus) {
                 $this->logger->error('PayU canceled a refund; it has to be handled manually.', [
                     'payu_order_id' => $notification->orderId,
                     'payu_refund_id' => $notification->refundId,
                 ]);
             }
+            $this->refundPaymentWhenCovered($details, $payment);
 
             return;
         }
@@ -157,6 +166,11 @@ final readonly class NotifyPaymentRequestHandler
             'status' => $notification->refundStatus,
         ]);
 
+        $this->refundPaymentWhenCovered($details, $payment);
+    }
+
+    private function refundPaymentWhenCovered(PaymentDetails $details, PaymentInterface $payment): void
+    {
         if (
             $details->finalizedRefundAmount() >= (int) $payment->getAmount() &&
             $this->stateMachine->can($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND)

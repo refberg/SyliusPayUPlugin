@@ -81,20 +81,39 @@ jobs:
 
     tests:
         runs-on: ubuntu-latest
-        name: "Tests: PHP ${{ matrix.php }}, Sylius ${{ matrix.sylius }}"
+        name: "Tests: PHP ${{ matrix.php }}, Sylius ${{ matrix.sylius }}, Symfony ${{ matrix.symfony }}${{ matrix.label && format(' ({0})', matrix.label) || '' }}"
+
+        env:
+            SYMFONY_REQUIRE: ${{ matrix.symfony }}
 
         strategy:
             fail-fast: false
             matrix:
                 include:
                     - php: "8.2"
-                      sylius: "~2.2.0"
-                    - php: "8.3"
-                      sylius: "~2.3.0"
+                      sylius: "2.2.12"
+                      symfony: "6.4.*"
+                      require: "doctrine/orm:~2.20.0 doctrine/dbal:~3.10.0 sylius/resource-bundle:~1.12.0 psr/log:~3.0.0 symfony/http-client-contracts:~3.4.4"
+                      require-dev: "phpunit/phpunit:~11.5.0"
+                      label: "lowest"
                     - php: "8.4"
-                      sylius: "~2.3.0"
+                      sylius: "~2.2.12"
+                      symfony: "7.4.*"
+                    - php: "8.3"
+                      sylius: "2.3.2"
+                      symfony: "6.4.*"
+                      require: "doctrine/orm:^2.20 doctrine/dbal:^3.10"
+                      require-dev: "phpunit/phpunit:~12.5.0"
+                      label: "ORM 2"
+                    - php: "8.3"
+                      sylius: "~2.3.2"
+                      symfony: "7.4.*"
+                    - php: "8.4"
+                      sylius: "~2.3.2"
+                      symfony: "8.*"
                     - php: "8.5"
-                      sylius: "~2.3.0"
+                      sylius: "~2.3.2"
+                      symfony: "8.*"
 
         services:
             mysql:
@@ -116,11 +135,15 @@ jobs:
                     php-version: "${{ matrix.php }}"
                     extensions: intl, sodium, pdo_mysql
                     coverage: none
-                    tools: composer:v2
+                    tools: composer:v2, flex
 
             -
-                name: Restrict Sylius version
-                run: composer require --no-update --no-scripts --no-interaction "sylius/sylius:${{ matrix.sylius }}"
+                name: Restrict versions
+                run: |
+                    composer require --no-update --no-scripts --no-interaction "sylius/sylius:${{ matrix.sylius }}" ${{ matrix.require }}
+                    if [ -n "${{ matrix.require-dev }}" ]; then
+                        composer require --dev --no-update --no-scripts --no-interaction ${{ matrix.require-dev }}
+                    fi
 
             -
                 name: Install dependencies

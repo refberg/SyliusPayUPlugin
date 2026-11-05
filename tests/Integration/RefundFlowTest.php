@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Integration;
 
+use PHPUnit\Framework\Attributes\TestWith;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -79,18 +80,74 @@ final class RefundFlowTest extends IntegrationTestCase
         self::assertSame('PENDING', array_values($this->details($payment)->refunds())[0]['status']);
     }
 
-    public function test_failed_refund_call_is_recorded_on_the_payment_request(): void
+    #[TestWith([400, 'ERROR_VALUE_INVALID'])]
+    #[TestWith([503, 'ERROR_INTERNAL'])]
+    public function test_failed_refund_call_is_recorded_on_the_payment_request(int $httpStatus, string $payuStatusCode): void
     {
         $payment = $this->paidPayment();
-        $this->payu->failNextRequest(400, 'ERROR_VALUE_INVALID');
+        $this->payu->failNextRequest($httpStatus, $payuStatusCode);
 
         $this->refundInAdmin($payment);
 
         $requests = $this->paymentRequests(PaymentRequestInterface::ACTION_REFUND);
         self::assertCount(1, $requests);
         self::assertSame(PaymentRequestInterface::STATE_FAILED, $requests[0]->getState());
-        self::assertStringContainsString('ERROR_VALUE_INVALID', (string) json_encode($requests[0]->getResponseData()));
+        self::assertStringContainsString($payuStatusCode, (string) json_encode($requests[0]->getResponseData()));
         self::assertSame([], $this->details($payment)->refunds());
+        self::assertSame('refunded', $this->reloadPayment($payment)->getState());
+    }
+
+    public function test_refund_request_for_a_payment_that_was_not_refunded_in_sylius_never_reaches_payu(): void
+    {
+        $payment = $this->paidPayment();
+
+        $this->dispatchPaymentRequest($payment, PaymentRequestInterface::ACTION_REFUND);
+
+        self::assertSame([], $this->payu->requests('POST', '#/refunds$#'));
+        $requests = $this->paymentRequests(PaymentRequestInterface::ACTION_REFUND);
+        self::assertCount(1, $requests);
+        self::assertSame(PaymentRequestInterface::STATE_FAILED, $requests[0]->getState());
+        self::assertSame(['error' => 'Payment in state "completed" cannot be refunded.'], $requests[0]->getResponseData());
+        self::assertSame('completed', $this->reloadPayment($payment)->getState());
+    }
+
+    public function test_admin_refund_after_a_partial_panel_refund_requests_only_the_remaining_amount(): void
+    {
+        $payment = $this->paidPayment();
+        $orderId = $this->payu->lastOrderId();
+        $panelRefundId = $this->payu->createPanelRefund($orderId, 500);
+        $body = $this->payu->refundNotificationBody($orderId, $panelRefundId, 'FINALIZED');
+        self::assertSame(Response::HTTP_OK, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
+
+        $this->refundInAdmin($payment);
+
+        $refundCalls = $this->payu->requests('POST', '#/refunds$#');
+        self::assertCount(1, $refundCalls);
+        $sent = json_decode($refundCalls[0]['body'], true, 8, JSON_THROW_ON_ERROR);
+        self::assertIsArray($sent);
+        self::assertSame(1000, self::at($sent, 'refund', 'amount'));
+
+        $requests = $this->paymentRequests(PaymentRequestInterface::ACTION_REFUND);
+        self::assertCount(1, $requests);
+        self::assertSame(PaymentRequestInterface::STATE_COMPLETED, $requests[0]->getState());
+    }
+
+    public function test_admin_refund_after_panel_refunds_covering_the_payment_does_not_call_payu(): void
+    {
+        $payment = $this->paidPayment();
+        $orderId = $this->payu->lastOrderId();
+        $panelRefundId = $this->payu->createPanelRefund($orderId, 1500);
+        $body = $this->payu->refundNotificationBody($orderId, $panelRefundId, 'PENDING');
+        self::assertSame(Response::HTTP_OK, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
+        self::assertSame('completed', $this->reloadPayment($payment)->getState());
+
+        $this->refundInAdmin($payment);
+
+        self::assertSame([], $this->payu->requests('POST', '#/refunds$#'));
+        $requests = $this->paymentRequests(PaymentRequestInterface::ACTION_REFUND);
+        self::assertCount(1, $requests);
+        self::assertSame(PaymentRequestInterface::STATE_COMPLETED, $requests[0]->getState());
+        self::assertTrue(self::at($requests[0]->getResponseData(), 'covered_by_payu_panel_refunds'));
     }
 
     private function paidPayment(): PaymentInterface

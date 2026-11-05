@@ -16,8 +16,10 @@ use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
+use Sylius\Component\Payment\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use function implode;
+use function sprintf;
 
 /**
  * Cancels every PayU order of the payment that may still be paid, after the payment
@@ -56,6 +58,12 @@ final readonly class CancelPaymentRequestHandler
         }
 
         $this->paymentLocker->lock($payment);
+        if (PaymentInterface::STATE_CANCELLED !== $payment->getState()) {
+            $this->failRequest($paymentRequest, sprintf('Payment in state "%s" cannot be cancelled.', (string) $payment->getState()));
+
+            return;
+        }
+
         $details = PaymentDetails::of($payment);
 
         $canceled = [];

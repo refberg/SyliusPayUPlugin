@@ -24,16 +24,20 @@ use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
 use Refberg\SyliusPayUPlugin\EventListener\PaymentTransitionListener;
 use Refberg\SyliusPayUPlugin\Form\Type\PayUGatewayConfigurationType;
 use Refberg\SyliusPayUPlugin\Notification\NotificationParser;
+use Refberg\SyliusPayUPlugin\Notification\NotificationParserInterface;
 use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator;
+use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGeneratorInterface;
 use Refberg\SyliusPayUPlugin\Order\OrderRequestFactory;
 use Refberg\SyliusPayUPlugin\Order\OrderRequestFactoryInterface;
 use Refberg\SyliusPayUPlugin\Order\PayUOrderValidator;
+use Refberg\SyliusPayUPlugin\Order\PayUOrderValidatorInterface;
 use Refberg\SyliusPayUPlugin\OrderPay\CaptureHttpResponseProvider;
-use Refberg\SyliusPayUPlugin\OrderPay\StatusHttpResponseProvider;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLocker;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplier;
+use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer;
+use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface;
 use Refberg\SyliusPayUPlugin\PayUGateway;
 use Refberg\SyliusPayUPlugin\Provider\NotifyResponseProvider;
 use Refberg\SyliusPayUPlugin\Provider\PayUNotifyPaymentProvider;
@@ -68,29 +72,42 @@ return static function (ContainerConfigurator $container): void {
         ->tag('monolog.logger', ['channel' => 'payu']);
 
     $services->set(SignatureVerifierInterface::class, SignatureVerifier::class);
-    $services->set(NotificationParser::class)->args([service(SignatureVerifierInterface::class)]);
+    $services->set(NotificationParserInterface::class, NotificationParser::class)->args([service(SignatureVerifierInterface::class)]);
 
     // Orders and payment state
-    $services->set(ExtOrderIdGenerator::class);
-    $services->set(PayUOrderValidator::class);
+    $services->set(ExtOrderIdGeneratorInterface::class, ExtOrderIdGenerator::class);
+    $services->set(PayUOrderValidatorInterface::class, PayUOrderValidator::class);
     $services->set(OrderRequestFactoryInterface::class, OrderRequestFactory::class)
-        ->args([service('router'), service('sylius_shop.provider.order_pay.after_pay_url')->nullOnInvalid()]);
+        ->args([service('router'), null]);
 
     $services->set(PaymentLockerInterface::class, PaymentLocker::class)
         ->args([service('doctrine.orm.entity_manager')]);
 
-    $services->set(PaymentStateApplier::class)
+    $services->set(PaymentStateApplierInterface::class, PaymentStateApplier::class)
         ->args([service('sylius_abstraction.state_machine'), service('logger')->ignoreOnInvalid()])
         ->tag('monolog.logger', ['channel' => 'payu']);
 
-    $services->set(PaymentSynchronizer::class)
+    $services->set(PaymentSynchronizerInterface::class, PaymentSynchronizer::class)
         ->args([
             service(PayUClientInterface::class),
-            service(PayUOrderValidator::class),
-            service(PaymentStateApplier::class),
+            service(PayUOrderValidatorInterface::class),
+            service(PaymentStateApplierInterface::class),
             service('logger')->ignoreOnInvalid(),
         ])
         ->tag('monolog.logger', ['channel' => 'payu']);
+
+    // Service IDs before 1.1, kept for applications that reference them.
+    $deprecatedAliases = [
+        NotificationParser::class => NotificationParserInterface::class,
+        ExtOrderIdGenerator::class => ExtOrderIdGeneratorInterface::class,
+        PayUOrderValidator::class => PayUOrderValidatorInterface::class,
+        PaymentStateApplier::class => PaymentStateApplierInterface::class,
+        PaymentSynchronizer::class => PaymentSynchronizerInterface::class,
+    ];
+    foreach ($deprecatedAliases as $alias => $id) {
+        $services->alias($alias, $id)
+            ->deprecate('refberg/sylius-payu-plugin', '1.1', 'The "%alias_id%" service alias is deprecated, use "' . $id . '" instead.');
+    }
 
     // Admin: gateway configuration form
     $services->set(PayUGatewayConfigurationType::class)
@@ -127,7 +144,7 @@ return static function (ContainerConfigurator $container): void {
             ...$handlerDefaults,
             service(PayUClientInterface::class),
             service(OrderRequestFactoryInterface::class),
-            service(ExtOrderIdGenerator::class),
+            service(ExtOrderIdGeneratorInterface::class),
             service(PaymentLockerInterface::class),
             service('sylius_abstraction.state_machine'),
             service('logger')->ignoreOnInvalid(),
@@ -138,7 +155,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(StatusPaymentRequestHandler::class)
         ->args([
             ...$handlerDefaults,
-            service(PaymentSynchronizer::class),
+            service(PaymentSynchronizerInterface::class),
             service(PaymentLockerInterface::class),
             service('sylius_abstraction.state_machine'),
             service('logger')->ignoreOnInvalid(),
@@ -149,8 +166,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(NotifyPaymentRequestHandler::class)
         ->args([
             ...$handlerDefaults,
-            service(NotificationParser::class),
-            service(PaymentSynchronizer::class),
+            service(NotificationParserInterface::class),
+            service(PaymentSynchronizerInterface::class),
             service(PaymentLockerInterface::class),
             service('sylius_abstraction.state_machine'),
             service('logger')->ignoreOnInvalid(),
@@ -184,8 +201,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(PayUNotifyPaymentProvider::class)
         ->args([
             service(CredentialsResolverInterface::class),
-            service(NotificationParser::class),
-            service(ExtOrderIdGenerator::class),
+            service(NotificationParserInterface::class),
+            service(ExtOrderIdGeneratorInterface::class),
             service('sylius.repository.payment'),
             service('sylius.repository.payment_request'),
         ])
@@ -203,10 +220,6 @@ return static function (ContainerConfigurator $container): void {
     $services->set(CaptureHttpResponseProvider::class)
         ->tag('refberg_payu.http_response_provider', ['action' => PaymentRequestInterface::ACTION_CAPTURE])
         ->tag('refberg_payu.http_response_provider', ['action' => PaymentRequestInterface::ACTION_AUTHORIZE]);
-
-    $services->set(StatusHttpResponseProvider::class)
-        ->args([service('sylius_shop.provider.order_pay.final_url')])
-        ->tag('refberg_payu.http_response_provider', ['action' => PaymentRequestInterface::ACTION_STATUS]);
 
     // Refunds and cancellations from the admin panel
     $transitionActions = [

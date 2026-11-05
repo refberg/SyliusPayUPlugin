@@ -5,10 +5,6 @@ declare(strict_types=1);
 namespace Tests\Refberg\SyliusPayUPlugin\Integration;
 
 use Symfony\Component\HttpFoundation\Response;
-use function is_array;
-use function json_decode;
-use function json_encode;
-use const JSON_THROW_ON_ERROR;
 
 /**
  * Headless checkout through Sylius API Platform endpoints, without any shop UI.
@@ -71,26 +67,7 @@ final class ApiPaymentFlowTest extends IntegrationTestCase
             'action' => 'refund',
         ]);
 
-        self::assertGreaterThanOrEqual(400, $this->client->getResponse()->getStatusCode());
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->client->getResponse()->getStatusCode());
         self::assertSame([], $this->payu->requests('POST', '#/refunds$#'));
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     *
-     * @return array<array-key, mixed>
-     */
-    private function postPaymentRequest(array $body): array
-    {
-        $this->client->request(
-            'POST',
-            '/api/v2/shop/orders/order-token/payment-requests',
-            server: ['CONTENT_TYPE' => 'application/ld+json', 'HTTP_ACCEPT' => 'application/ld+json'],
-            content: json_encode($body, JSON_THROW_ON_ERROR),
-        );
-
-        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
-
-        return is_array($data) ? $data : [];
     }
 }

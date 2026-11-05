@@ -29,6 +29,9 @@ final readonly class PayUOrder
     ) {
     }
 
+    /**
+     * @deprecated since 1.1, will be removed in 2.0.
+     */
     public function isFinal(): bool
     {
         return self::isFinalStatus($this->status);
