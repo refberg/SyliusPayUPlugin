@@ -11,7 +11,7 @@ use function is_scalar;
 use function sprintf;
 use function trim;
 
-final class CredentialsResolver implements CredentialsResolverInterface
+final readonly class CredentialsResolver implements CredentialsResolverInterface
 {
     public function supports(PaymentMethodInterface $paymentMethod): bool
     {
@@ -37,7 +37,7 @@ final class CredentialsResolver implements CredentialsResolverInterface
         /** @var array<string, mixed> $config */
         $config = $paymentMethod->getGatewayConfig()?->getConfig() ?? [];
 
-        $environment = Environment::tryFrom(self::string($config, 'environment'));
+        $environment = Environment::tryFrom(self::string($config, PayUGateway::CONFIG_ENVIRONMENT));
         if (null === $environment) {
             throw new InvalidConfigurationException(sprintf(
                 'Payment method "%s" has no valid PayU environment.',
@@ -46,10 +46,10 @@ final class CredentialsResolver implements CredentialsResolverInterface
         }
 
         $credentials = new PayUCredentials(
-            posId: self::string($config, 'pos_id'),
-            secondKey: self::string($config, 'second_key'),
-            clientId: self::string($config, 'oauth_client_id'),
-            clientSecret: self::string($config, 'oauth_client_secret'),
+            posId: self::string($config, PayUGateway::CONFIG_POS_ID),
+            secondKey: self::string($config, PayUGateway::CONFIG_SECOND_KEY),
+            clientId: self::string($config, PayUGateway::CONFIG_OAUTH_CLIENT_ID),
+            clientSecret: self::string($config, PayUGateway::CONFIG_OAUTH_CLIENT_SECRET),
             environment: $environment,
         );
 

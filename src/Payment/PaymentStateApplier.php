@@ -21,16 +21,8 @@ use Sylius\Component\Payment\PaymentTransitions;
  *  - CANCELED fails the payment only when no other PayU order of this payment may still be paid,
  *  - NEW, PENDING and WAITING_FOR_CONFIRMATION never change the payment state.
  */
-final readonly class PaymentStateApplier
+final readonly class PaymentStateApplier implements PaymentStateApplierInterface
 {
-    public const RESULT_COMPLETED = 'completed';
-
-    public const RESULT_FAILED = 'failed';
-
-    public const RESULT_UNCHANGED = 'unchanged';
-
-    public const RESULT_WARNING = 'warning';
-
     public function __construct(
         private StateMachineInterface $stateMachine,
         private LoggerInterface $logger = new NullLogger(),

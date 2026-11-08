@@ -12,7 +12,8 @@ use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
 use Refberg\SyliusPayUPlugin\Config\InvalidConfigurationException;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
-use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizer;
+use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface;
+use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use function array_slice;
@@ -29,7 +30,7 @@ final readonly class StatusPaymentRequestHandler
     public function __construct(
         private PaymentRequestProviderInterface $paymentRequestProvider,
         private CredentialsResolverInterface $credentialsResolver,
-        private PaymentSynchronizer $synchronizer,
+        private PaymentSynchronizerInterface $synchronizer,
         private PaymentLockerInterface $paymentLocker,
         private StateMachineInterface $stateMachine,
         private LoggerInterface $logger = new NullLogger(),
@@ -48,7 +49,9 @@ final readonly class StatusPaymentRequestHandler
 
             $details = PaymentDetails::of($payment);
             foreach (array_slice($details->getOpenOrderIds(), 0, 3) as $orderId) {
-                $this->synchronizer->synchronize($payment, $orderId, $credentials);
+                if (PaymentStateApplierInterface::RESULT_COMPLETED === $this->synchronizer->synchronize($payment, $orderId, $credentials)) {
+                    $this->restorePaidMethod($payment, $method, $orderId);
+                }
             }
         } catch (PayUException|InvalidConfigurationException $exception) {
             $this->logger->warning('Could not check PayU order status.', [

@@ -1,6 +1,3 @@
-imports:
-    - { resource: "twig_hooks/**/*.yaml" }
-
 framework:
     cache:
         pools:

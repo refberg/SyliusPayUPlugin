@@ -12,7 +12,7 @@ use Refberg\SyliusPayUPlugin\Api\PayUClientInterface;
 use Refberg\SyliusPayUPlugin\Command\CapturePaymentRequest;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
 use Refberg\SyliusPayUPlugin\Config\InvalidConfigurationException;
-use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator;
+use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGeneratorInterface;
 use Refberg\SyliusPayUPlugin\Order\OrderRequestFactoryInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
@@ -37,7 +37,7 @@ final readonly class CapturePaymentRequestHandler
         private CredentialsResolverInterface $credentialsResolver,
         private PayUClientInterface $client,
         private OrderRequestFactoryInterface $orderRequestFactory,
-        private ExtOrderIdGenerator $extOrderIdGenerator,
+        private ExtOrderIdGeneratorInterface $extOrderIdGenerator,
         private PaymentLockerInterface $paymentLocker,
         private StateMachineInterface $stateMachine,
         private LoggerInterface $logger = new NullLogger(),
@@ -54,16 +54,16 @@ final readonly class CapturePaymentRequestHandler
         }
 
         $payment = self::corePayment($paymentRequest);
-        if (PaymentInterface::STATE_NEW !== $payment->getState()) {
-            $this->failRequest($paymentRequest, sprintf('Payment in state "%s" cannot be paid.', (string) $payment->getState()));
-
-            return;
-        }
 
         try {
             $method = $paymentRequest->getMethod();
             $credentials = $this->credentialsResolver->resolve($method);
             $this->paymentLocker->lock($payment);
+            if (PaymentInterface::STATE_NEW !== $payment->getState()) {
+                $this->failRequest($paymentRequest, sprintf('Payment in state "%s" cannot be paid.', (string) $payment->getState()));
+
+                return;
+            }
 
             $extOrderId = $this->extOrderIdGenerator->generate($payment, $paymentRequest);
             $orderRequest = $this->orderRequestFactory->create($paymentRequest, $payment, $credentials, $extOrderId);

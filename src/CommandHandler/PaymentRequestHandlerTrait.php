@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace Refberg\SyliusPayUPlugin\CommandHandler;
 
 use LogicException;
+use Psr\Log\LoggerInterface;
+use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
+use Sylius\Component\Payment\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentRequestTransitions;
 
 /**
  * @property StateMachineInterface $stateMachine
+ * @property LoggerInterface $logger
  */
 trait PaymentRequestHandlerTrait
 {
@@ -35,6 +39,27 @@ trait PaymentRequestHandlerTrait
         if ($this->stateMachine->can($paymentRequest, PaymentRequestTransitions::GRAPH, $transition)) {
             $this->stateMachine->apply($paymentRequest, PaymentRequestTransitions::GRAPH, $transition);
         }
+    }
+
+    // Refunds from Sylius use the payment's method, so it must be the PayU method that was paid.
+    private function restorePaidMethod(PaymentInterface $payment, PaymentMethodInterface $method, string $orderId): void
+    {
+        if ($payment->getMethod() === $method) {
+            return;
+        }
+
+        $previousMethod = $payment->getMethod();
+        $payment->setMethod($method);
+
+        // The applier saved its own details; a fresh read keeps completed_order_id.
+        $completedDetails = PaymentDetails::of($payment);
+        $completedDetails->addWarning(PaymentDetails::WARNING_PAYMENT_METHOD_CHANGED, $orderId);
+        $completedDetails->save();
+        $this->logger->warning('PayU paid the payment after the customer switched to another payment method; the PayU method was restored.', [
+            'payment_id' => $payment->getId(),
+            'payu_order_id' => $orderId,
+            'switched_to_method' => $previousMethod?->getCode(),
+        ]);
     }
 
     private static function corePayment(PaymentRequestInterface $paymentRequest): PaymentInterface

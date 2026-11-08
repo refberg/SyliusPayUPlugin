@@ -9,20 +9,18 @@ use Psr\Log\NullLogger;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUException;
 use Refberg\SyliusPayUPlugin\Api\PayUClientInterface;
 use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
-use Refberg\SyliusPayUPlugin\Order\PayUOrderValidator;
+use Refberg\SyliusPayUPlugin\Order\PayUOrderValidatorInterface;
 use Sylius\Component\Payment\Model\PaymentInterface;
 
 /**
  * Fetches one PayU order from the API, checks it against the payment and applies its state.
  */
-final readonly class PaymentSynchronizer
+final readonly class PaymentSynchronizer implements PaymentSynchronizerInterface
 {
-    public const RESULT_INVALID = 'invalid';
-
     public function __construct(
         private PayUClientInterface $client,
-        private PayUOrderValidator $validator,
-        private PaymentStateApplier $stateApplier,
+        private PayUOrderValidatorInterface $validator,
+        private PaymentStateApplierInterface $stateApplier,
         private LoggerInterface $logger = new NullLogger(),
     ) {
     }
@@ -30,7 +28,7 @@ final readonly class PaymentSynchronizer
     /**
      * @throws PayUException
      *
-     * @return string one of PaymentStateApplier::RESULT_* or self::RESULT_INVALID
+     * @return string one of PaymentStateApplierInterface::RESULT_* or self::RESULT_INVALID
      */
     public function synchronize(PaymentInterface $payment, string $orderId, PayUCredentials $credentials): string
     {

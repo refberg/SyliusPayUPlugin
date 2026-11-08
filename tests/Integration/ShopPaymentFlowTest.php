@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Tests\Refberg\SyliusPayUPlugin\Integration;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
+use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentRequestTransitions;
+use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
 use function json_encode;
@@ -164,6 +167,22 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
         self::assertSame('new', $this->reloadPayment($payment)->getState());
     }
 
+    public function test_notification_for_a_method_without_credentials_returns_503_so_payu_retries(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+        $this->payu->setOrderStatus($orderId, 'COMPLETED');
+        $this->createPayUMethod('PAYU2', FakePayU::POS_ID, FakePayU::SECOND_KEY)->getGatewayConfig()?->setConfig(['environment' => 'sandbox']);
+        $this->em()->flush();
+        $body = $this->payu->orderNotificationBody($orderId);
+
+        self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $this->notify($body, FakePayU::signatureHeader($body), 'PAYU2')->getStatusCode());
+
+        self::assertSame('new', $this->reloadPayment($payment)->getState());
+        self::assertCount(0, $this->paymentRequests(PaymentRequestInterface::ACTION_NOTIFY));
+    }
+
     /**
      * @return iterable<string, array{string, string}>
      */
@@ -266,6 +285,150 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
 
         self::assertSame(Response::HTTP_OK, $this->notifyOrder($orderId)->getStatusCode());
         self::assertSame('completed', $this->reloadPayment($payment)->getState());
+    }
+
+    #[TestWith([401])]
+    #[TestWith([403])]
+    public function test_payu_api_rejecting_the_plugin_credentials_returns_5xx_so_payu_retries(int $httpStatus): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+        $this->payu->setOrderStatus($orderId, 'COMPLETED');
+        $this->payu->failNextRequest($httpStatus, 'UNAUTHORIZED');
+        if (401 === $httpStatus) {
+            // The client retries a 401 once with a fresh token.
+            $this->payu->failNextRequest($httpStatus, 'UNAUTHORIZED');
+        }
+
+        $this->client->catchExceptions(true);
+        self::assertGreaterThanOrEqual(500, $this->notifyOrder($orderId)->getStatusCode());
+        self::assertSame('new', $this->reloadPayment($payment)->getState());
+
+        self::assertSame(Response::HTTP_OK, $this->notifyOrder($orderId)->getStatusCode());
+        self::assertSame('completed', $this->reloadPayment($payment)->getState());
+    }
+
+    #[TestWith(['notification'])]
+    #[TestWith(['return'])]
+    public function test_payment_made_in_payu_after_the_customer_switched_payment_method_completes_it_with_a_warning(string $confirmedBy): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+
+        $bankTransfer = $this->factory('payment_method')->createNew();
+        self::assertInstanceOf(PaymentMethodInterface::class, $bankTransfer);
+        $bankTransfer->setCode('BANK_TRANSFER');
+        $bankTransfer->setCurrentLocale('en_US');
+        $bankTransfer->setFallbackLocale('en_US');
+        $bankTransfer->setName('Bank transfer');
+        $payment = $this->reloadPayment($payment);
+        $payment->setMethod($bankTransfer);
+        $this->em()->persist($bankTransfer);
+        $this->em()->flush();
+
+        $this->payu->setOrderStatus($orderId, 'COMPLETED');
+        $continuePath = (string) parse_url($this->payu->order($orderId)['continueUrl'], PHP_URL_PATH);
+        if ('notification' === $confirmedBy) {
+            self::assertSame(Response::HTTP_OK, $this->notifyOrder($orderId)->getStatusCode());
+            $this->client->request('GET', $continuePath);
+            self::assertTrue($this->client->getResponse()->isRedirect());
+        } else {
+            $this->client->request('GET', $continuePath);
+            self::assertTrue($this->client->getResponse()->isRedirect());
+            self::assertSame(Response::HTTP_OK, $this->notifyOrder($orderId)->getStatusCode());
+        }
+
+        $payment = $this->reloadPayment($payment);
+        self::assertSame('completed', $payment->getState());
+        self::assertSame(self::METHOD_CODE, $payment->getMethod()?->getCode());
+        $details = PaymentDetails::of($payment);
+        self::assertSame($orderId, $details->getCompletedOrderId());
+        self::assertSame([['type' => PaymentDetails::WARNING_PAYMENT_METHOD_CHANGED, 'order_id' => $orderId]], $details->warnings());
+
+        // The restored PayU method lets an admin refund reach PayU.
+        $stateMachine = self::service(StateMachineInterface::class, 'sylius_abstraction.state_machine');
+        $stateMachine->apply($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND);
+        $this->em()->flush();
+
+        self::assertCount(1, $this->payu->requests('POST', '#/orders/' . $orderId . '/refunds$#'));
+    }
+
+    #[TestWith(['notification'])]
+    #[TestWith(['return'])]
+    public function test_pending_payu_order_after_the_customer_switched_payment_method_keeps_the_new_method(string $checkedBy): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+
+        $bankTransfer = $this->factory('payment_method')->createNew();
+        self::assertInstanceOf(PaymentMethodInterface::class, $bankTransfer);
+        $bankTransfer->setCode('BANK_TRANSFER');
+        $bankTransfer->setCurrentLocale('en_US');
+        $bankTransfer->setFallbackLocale('en_US');
+        $bankTransfer->setName('Bank transfer');
+        $payment = $this->reloadPayment($payment);
+        $payment->setMethod($bankTransfer);
+        $this->em()->persist($bankTransfer);
+        $this->em()->flush();
+
+        $this->payu->setOrderStatus($orderId, 'PENDING');
+        if ('notification' === $checkedBy) {
+            self::assertSame(Response::HTTP_OK, $this->notifyOrder($orderId)->getStatusCode());
+        } else {
+            $this->client->request('GET', (string) parse_url($this->payu->order($orderId)['continueUrl'], PHP_URL_PATH));
+            self::assertTrue($this->client->getResponse()->isRedirect());
+        }
+
+        $payment = $this->reloadPayment($payment);
+        self::assertSame('new', $payment->getState());
+        self::assertSame('BANK_TRANSFER', $payment->getMethod()?->getCode());
+        self::assertSame([], PaymentDetails::of($payment)->warnings());
+    }
+
+    public function test_payment_made_in_the_old_payu_order_after_switching_to_another_payu_method_is_refunded_with_the_paid_method(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+
+        $payment = $this->reloadPayment($payment);
+        $payment->setMethod($this->createPayUMethod('PAYU2', '999999', 'other-second-key'));
+        $this->em()->flush();
+
+        $this->payu->setOrderStatus($orderId, 'COMPLETED');
+        $this->client->request('GET', (string) parse_url($this->payu->order($orderId)['continueUrl'], PHP_URL_PATH));
+        self::assertTrue($this->client->getResponse()->isRedirect());
+
+        $payment = $this->reloadPayment($payment);
+        self::assertSame('completed', $payment->getState());
+        self::assertSame(self::METHOD_CODE, $payment->getMethod()?->getCode());
+        self::assertSame([['type' => PaymentDetails::WARNING_PAYMENT_METHOD_CHANGED, 'order_id' => $orderId]], PaymentDetails::of($payment)->warnings());
+
+        $stateMachine = self::service(StateMachineInterface::class, 'sylius_abstraction.state_machine');
+        $stateMachine->apply($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND);
+        $this->em()->flush();
+
+        self::assertSame(self::METHOD_CODE, $this->paymentRequests(PaymentRequestInterface::ACTION_REFUND)[0]->getMethod()->getCode());
+        self::assertCount(1, $this->payu->requests('POST', '#/orders/' . $orderId . '/refunds$#'));
+    }
+
+    public function test_notification_for_another_payu_method_never_pays_the_payment(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+        $this->createPayUMethod('PAYU2', '999999', 'other-second-key');
+        $this->em()->flush();
+        $this->payu->setOrderStatus($orderId, 'COMPLETED');
+        $body = $this->payu->orderNotificationBody($orderId);
+
+        self::assertSame(Response::HTTP_BAD_REQUEST, $this->notify($body, FakePayU::signatureHeader($body), 'PAYU2')->getStatusCode());
+        self::assertSame(Response::HTTP_OK, $this->notify($body, FakePayU::signatureHeader($body, 'other-second-key'), 'PAYU2')->getStatusCode());
+
+        self::assertSame('new', $this->reloadPayment($payment)->getState());
     }
 
     private function finalizeCaptureRequests(string $transition): void

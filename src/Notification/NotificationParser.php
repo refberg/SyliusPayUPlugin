@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Refberg\SyliusPayUPlugin\Notification;
 
 use JsonException;
+use Refberg\SyliusPayUPlugin\Api\Json;
 use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Refberg\SyliusPayUPlugin\Signature\SignatureVerifierInterface;
 use function is_array;
-use function is_int;
 use function is_numeric;
 use function is_string;
 use function json_decode;
@@ -18,7 +18,7 @@ use const JSON_THROW_ON_ERROR;
  * Verifies the signature of a PayU notification and extracts its identifiers.
  * Returns null for anything that is not a correctly signed, well-formed notification.
  */
-final readonly class NotificationParser
+final readonly class NotificationParser implements NotificationParserInterface
 {
     public function __construct(private SignatureVerifierInterface $signatureVerifier)
     {
@@ -70,7 +70,7 @@ final readonly class NotificationParser
     {
         $refund = $data['refund'] ?? null;
         if (is_array($refund)) {
-            $orderId = self::string($data, 'orderId');
+            $orderId = Json::string($data, 'orderId');
             if (null === $orderId) {
                 return null;
             }
@@ -78,12 +78,12 @@ final readonly class NotificationParser
             return new Notification(
                 type: Notification::TYPE_REFUND,
                 orderId: $orderId,
-                extOrderId: self::string($data, 'extOrderId'),
-                refundId: self::string($refund, 'refundId'),
-                extRefundId: self::string($refund, 'extRefundId'),
-                refundStatus: self::string($refund, 'status'),
+                extOrderId: Json::string($data, 'extOrderId'),
+                refundId: Json::string($refund, 'refundId'),
+                extRefundId: Json::string($refund, 'extRefundId'),
+                refundStatus: Json::string($refund, 'status'),
                 refundAmount: is_numeric($refund['amount'] ?? null) ? (int) $refund['amount'] : null,
-                refundCurrency: self::string($refund, 'currencyCode'),
+                refundCurrency: Json::string($refund, 'currencyCode'),
             );
         }
 
@@ -92,7 +92,7 @@ final readonly class NotificationParser
             return null;
         }
 
-        $orderId = self::string($order, 'orderId');
+        $orderId = Json::string($order, 'orderId');
         if (null === $orderId) {
             return null;
         }
@@ -100,20 +100,7 @@ final readonly class NotificationParser
         return new Notification(
             type: Notification::TYPE_ORDER,
             orderId: $orderId,
-            extOrderId: self::string($order, 'extOrderId'),
+            extOrderId: Json::string($order, 'extOrderId'),
         );
-    }
-
-    /**
-     * @param array<array-key, mixed> $data
-     */
-    private static function string(array $data, string $key): ?string
-    {
-        $value = $data[$key] ?? null;
-        if (is_int($value)) {
-            $value = (string) $value;
-        }
-
-        return is_string($value) && '' !== $value ? $value : null;
     }
 }

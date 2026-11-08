@@ -30,10 +30,19 @@ Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, 
 
 ## Wymagania
 
-| Sylius | PHP     | Symfony                                 |
-|--------|---------|-----------------------------------------|
-| 2.2    | 8.2–8.4 | 6.4, 7.4                                |
-| 2.3    | 8.3–8.5 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4+)     |
+| Sylius  | PHP     | Symfony                                 |
+|---------|---------|-----------------------------------------|
+| 2.2.12+ | 8.2–8.4 | 6.4, 7.4                                |
+| 2.3.2+  | 8.3–8.5 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4+)     |
+
+Sklep Syliusa (`SyliusShopBundle`) i panel admina (`SyliusAdminBundle`) są opcjonalne, więc plugin działa także
+w aplikacjach udostępniających tylko API.
+
+Maszyna stanów `sylius_payment` musi używać adaptera Symfony Workflow, który jest domyślny w Syliusie.
+Plugin wysyła zwroty i anulowania do PayU z listenerów zdarzeń `workflow.sylius_payment.completed.refund`
+i `workflow.sylius_payment.completed.cancel`. Gdy `sylius_payment` używa adaptera winzou
+(`winzou_state_machine` w `sylius_state_machine_abstraction.graphs_to_adapters_mapping` lub `default_adapter`),
+zwroty i anulowania zrobione w Syliusie nie trafiają do PayU i trzeba je wykonać w panelu PayU.
 
 ## Instalacja
 
@@ -61,6 +70,18 @@ Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, 
    ```bash
    bin/console sylius:payment:generate-key
    ```
+
+5. Tylko w aplikacjach bez sklepu Syliusa: zaimportuj trasę powiadomień o płatności, którą Sylius importuje
+   zwykle razem z trasami sklepu, w `config/routes/sylius_payment.yaml`:
+
+   ```yaml
+   sylius_payment_notify:
+       resource: "@SyliusPaymentBundle/Resources/config/routing/integrations/sylius.yaml"
+   ```
+
+   Bez tej trasy żądania capture kończą się błędem, a PayU nie może dostarczyć powiadomień. W aplikacji z panelem admina
+   nie da się też wyświetlić strony edycji metody płatności PayU, bo pokazuje ona adres powiadomień.
+   Klienci API muszą też przesyłać `continue_url` w payloadzie capture (zobacz [API](#api)).
 
 Migracje bazy danych nie są potrzebne. Plugin trzyma swoje dane w `sylius_payment.details`.
 
@@ -97,6 +118,72 @@ Do ręcznych testów możesz użyć publicznego punktu płatności PLN w sandbox
 Jeśli żądania płatności są przetwarzane asynchronicznie (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` inny niż `sync://`),
 ustaw `framework.router.default_uri` na publiczny adres sklepu, żeby adres powiadomień był generowany poprawnie.
 
+Żądania do PayU (OAuth i REST API) mają limit bezczynności 15 sekund, ustawiony parametrem `refberg_payu.http_timeout`.
+Aby go zmienić, ustaw parametr w konfiguracji aplikacji:
+
+```yaml
+parameters:
+    refberg_payu.http_timeout: 30.0
+```
+
+### Tworzenie metody płatności poza panelem admina
+
+Metoda płatności PayU tworzona w fixture'ach, migracjach lub kodzie musi mieć `usePayum` ustawione na `false`.
+Sylius domyślnie ustawia `true`; formularz admina sam wyłącza tę opcję dla bramek bez fabryki Payum.
+Przy `usePayum` ustawionym na `true` sklep przekazuje płatność do Payum zamiast do pluginu, więc strona płatności
+kończy się błędem (Payum nie ma dla niej bramki), a Sylius nie szyfruje konfiguracji bramki.
+
+Fixture (`sylius_fixtures`):
+
+```yaml
+sylius_fixtures:
+    suites:
+        default:
+            fixtures:
+                payment_method:
+                    options:
+                        custom:
+                            payu:
+                                code: PAYU
+                                name: PayU
+                                gatewayName: payu
+                                gatewayFactory: !php/const Refberg\SyliusPayUPlugin\PayUGateway::FACTORY_NAME
+                                gatewayConfig:
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_ENVIRONMENT: sandbox
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_POS_ID: '...'
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_SECOND_KEY: '...'
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_OAUTH_CLIENT_ID: '...'
+                                    !php/const Refberg\SyliusPayUPlugin\PayUGateway::CONFIG_OAUTH_CLIENT_SECRET: '...'
+                                usePayum: false
+                                enabled: true
+                                channels: [FASHION_WEB]
+```
+
+Kod, z serwisami `sylius.factory.payment_method` i `sylius.repository.payment_method`:
+
+```php
+use Refberg\SyliusPayUPlugin\PayUGateway;
+
+$paymentMethod = $paymentMethodFactory->createWithGateway(PayUGateway::FACTORY_NAME);
+$paymentMethod->setCode('PAYU');
+$paymentMethod->setName('PayU');
+$paymentMethod->addChannel($channel);
+
+/** @var \Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface $gatewayConfig */
+$gatewayConfig = $paymentMethod->getGatewayConfig();
+$gatewayConfig->setGatewayName('payu');
+$gatewayConfig->setUsePayum(false);
+$gatewayConfig->setConfig([
+    PayUGateway::CONFIG_ENVIRONMENT => 'sandbox',
+    PayUGateway::CONFIG_POS_ID => '...',
+    PayUGateway::CONFIG_SECOND_KEY => '...',
+    PayUGateway::CONFIG_OAUTH_CLIENT_ID => '...',
+    PayUGateway::CONFIG_OAUTH_CLIENT_SECRET => '...',
+]);
+
+$paymentMethodRepository->add($paymentMethod);
+```
+
 ## Jak to działa
 
 ### Sklep
@@ -126,7 +213,8 @@ Content-Type: application/ld+json
 ```
 
 `responseData.redirect_url` zawiera adres strony płatności PayU. `continue_url` jest opcjonalne, jeśli sklep jest zainstalowany.
-Bez niego klient wraca na stronę after-pay sklepu.
+Bez niego klient wraca na stronę after-pay sklepu. Bez sklepu żądanie capture bez `continue_url` kończy się błędem,
+a PayU nie jest wywoływane.
 
 Po powrocie klienta zapytaj o status:
 
@@ -152,18 +240,42 @@ samej płatności (np. klient ponowił płatność w innej karcie), zamówienie 
 Plugin zapisuje ostrzeżenie w szczegółach płatności (`refberg_payu.warnings`) i loguje błąd na kanale `payu`.
 Taką płatność trzeba zwrócić ręcznie w panelu PayU.
 
+Jeśli klient po przekierowaniu do PayU zmieni w zamówieniu metodę płatności, zamówienie PayU utworzone przed zmianą
+nadal należy do płatności i można je opłacić. Płatność opłaca powiadomienie albo sprawdzenie statusu (powrót klienta
+z PayU lub żądanie płatności `status` przez API), gdy API PayU potwierdzi opłacenie zamówienia; plugin przywraca
+w płatności opłaconą metodę PayU, zapisuje ostrzeżenie `paid_with_previous_payment_method` i loguje ostrzeżenie.
+Dzięki temu zwroty tej płatności z Syliusa trafiają do PayU.
+
+Płatność anulowana w Syliusie, zanim stare zamówienie PayU zostanie opłacone, ma nadal nową metodę, więc anulowanie
+może do tego zamówienia nie trafić:
+
+- Inna metoda PayU: anulowanie jest wysyłane z danymi dostępowymi nowej metody. Dla zamówienia z innego POS PayU
+  powinno je odrzucić; żądanie jest wtedy oznaczane jako nieudane, a błąd trafia do logu.
+- Metoda spoza PayU: anulowanie nie trafia do PayU. Stare zamówienie PayU zostaje otwarte; jeśli klient je opłaci,
+  płatność pozostaje anulowana i dostaje ostrzeżenie `payment_completed_after_failure`.
+
+W obu przypadkach zwrot lub anulowanie trzeba zrobić w panelu PayU.
+
 Powiadomienia bez podpisu lub z błędnym podpisem dostają odpowiedź HTTP 400 i nie są zapisywane. Powiadomienia
-dotyczące nieznanych zamówień dostają HTTP 404. Gdy API PayU jest niedostępne, endpoint odpowiada HTTP 5xx,
-więc PayU ponowi powiadomienie później.
+dotyczące nieznanych zamówień dostają HTTP 404. Gdy API PayU jest niedostępne albo odrzuca dane dostępowe pluginu
+(HTTP 401/403), endpoint odpowiada HTTP 5xx, więc PayU ponowi powiadomienie później.
 
 ### Zwroty
 
 Kliknij **Zwrot** przy opłaconej płatności PayU w panelu admina. Plugin zleca w PayU pełny zwrot
-(`extRefundId` to identyfikator żądania płatności, więc ponowienia nie tworzą duplikatów). Końcowy status zwrotu
-z powiadomienia PayU jest zapisywany w szczegółach płatności.
+(`extRefundId` to identyfikator żądania płatności, więc ponownie dostarczone żądanie nie tworzy drugiego zwrotu).
+Końcowy status zwrotu z powiadomienia PayU jest zapisywany w szczegółach płatności.
+
+Zwroty zlecone wcześniej w panelu PayU (poza anulowanymi) są odejmowane od kwoty zwrotu. Gdy pokrywają całą
+płatność, plugin nie wywołuje PayU i oznacza żądanie zwrotu jako zakończone.
+
+Odejmowane są też zwroty z panelu, które są jeszcze w toku. Jeśli PayU anuluje taki zwrot już po zwrocie z Syliusa,
+klient dostaje tylko kwotę wysłaną do PayU (nic, gdy zwroty z panelu pokrywały całą płatność). Płatność zostaje
+`refunded`, a plugin loguje błąd; resztę trzeba zwrócić ręcznie w panelu PayU.
 
 Sylius oznacza płatność jako zwróconą od razu, zanim PayU potwierdzi zwrot. Jeśli PayU odrzuci zwrot, żądanie
 zwrotu zostaje oznaczone jako nieudane i zapisywany jest błąd w logu. Wtedy zwrot trzeba obsłużyć w panelu PayU.
+Sylius nie ponawia nieudanego żądania automatycznie, także gdy PayU było niedostępne (timeout, HTTP 5xx).
 
 ### Anulowanie
 
@@ -171,6 +283,8 @@ Gdy płatność PayU zostanie anulowana w Syliusie (np. razem z zamówieniem), p
 zamówienia tej płatności, które mogą jeszcze zostać opłacone (`DELETE /api/v2_1/orders/{orderId}`). Jeśli PayU
 odmówi, bo zamówienie zostało już opłacone, żądanie anulowania jest oznaczane jako nieudane i zapisywany jest błąd
 w logu. Późniejsze powiadomienie COMPLETED zostaje zapisane jako ostrzeżenie, a płatność nie zostaje opłacona.
+Sylius nie ponawia nieudanego żądania anulowania automatycznie, także gdy PayU było niedostępne (timeout, HTTP 5xx);
+sprawdź wtedy zamówienie w panelu PayU.
 
 ### Zwroty zlecone w panelu PayU
 
@@ -181,11 +295,43 @@ wysyłany kolejny zwrot. Zwroty częściowe są widoczne tylko w szczegółach p
 ## Bezpieczeństwo
 
 - Sekrety są przechowywane w konfiguracji bramki, którą Sylius szyfruje.
+- Zwroty i anulowania trafiają do PayU tylko dla płatności już zwróconej lub anulowanej w Syliusie,
+  więc nie da się ich wywołać przez shop API.
 - Sekrety i tokeny OAuth nigdy nie trafiają do logów ani do danych żądań płatności.
   Komunikaty wyjątków zawierają tylko kody HTTP i kody statusu PayU.
 - Token OAuth jest przechowywany w puli cache `refberg_payu.cache` (domyślnie `cache.app`) do chwili tuż przed wygaśnięciem.
 - Ruch do PayU przechodzi przez serwis `refberg_payu.http_client` (alias `http_client`).
   Można go nadpisać, np. aby użyć proxy.
+
+## Rozszerzanie
+
+Poniższe serwisy są zarejestrowane pod swoim interfejsem. Dekoruj lub podmieniaj je po interfejsie:
+
+| Identyfikator serwisu                                               | Odpowiedzialność                                     |
+|---------------------------------------------------------------------|------------------------------------------------------|
+| `Refberg\SyliusPayUPlugin\Api\AccessTokenProviderInterface`         | token OAuth do API PayU                              |
+| `Refberg\SyliusPayUPlugin\Api\PayUClientInterface`                  | wywołania REST API PayU                              |
+| `Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface`      | dane dostępowe PayU z konfiguracji bramki            |
+| `Refberg\SyliusPayUPlugin\Signature\SignatureVerifierInterface`     | weryfikacja nagłówka `OpenPayu-Signature`            |
+| `Refberg\SyliusPayUPlugin\Notification\NotificationParserInterface` | parsowanie podpisanych powiadomień                   |
+| `Refberg\SyliusPayUPlugin\Order\OrderRequestFactoryInterface`       | treść żądania utworzenia zamówienia PayU             |
+| `Refberg\SyliusPayUPlugin\Order\ExtOrderIdGeneratorInterface`       | wartości `extOrderId`                                |
+| `Refberg\SyliusPayUPlugin\Order\PayUOrderValidatorInterface`        | zgodność zamówienia PayU z płatnością Sylius         |
+| `Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface`           | blokada płatności                                    |
+| `Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface`     | zmiana stanu płatności                               |
+| `Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface`     | pobranie, sprawdzenie i zastosowanie zamówienia PayU |
+
+Na przykład zmiana formatu `extOrderId`:
+
+```yaml
+services:
+    App\Payment\ExtOrderIdGenerator:
+        decorates: Refberg\SyliusPayUPlugin\Order\ExtOrderIdGeneratorInterface
+        arguments: ['@.inner']
+```
+
+`extractPaymentId()` musi odczytać ID płatności z każdej wartości zwróconej przez `generate()`,
+bo po nim powiadomienia są przypisywane do płatności.
 
 ## Rozwój
 

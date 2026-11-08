@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\Form;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Form\Type\PayUGatewayConfigurationType;
 use Symfony\Component\Form\Extension\Validator\ValidatorExtension;
 use Symfony\Component\Form\FormFactoryInterface;
+use Symfony\Component\Form\FormInterface;
 use Symfony\Component\Form\Forms;
 use Symfony\Component\Validator\Validation;
 use function array_merge;
@@ -71,5 +73,65 @@ final class PayUGatewayConfigurationTypeTest extends TestCase
         $data = $form->getData();
         self::assertSame('new-key', $data['second_key']);
         self::assertSame('new-secret', $data['oauth_client_secret']);
+    }
+
+    public function test_complete_configuration_is_valid_in_the_admin_validation_group(): void
+    {
+        $form = $this->adminForm(null);
+
+        $form->submit(self::STORED);
+
+        self::assertTrue($form->isValid());
+    }
+
+    public function test_empty_secret_fields_are_valid_when_secrets_are_stored(): void
+    {
+        $form = $this->adminForm(self::STORED);
+
+        $form->submit(array_merge(self::STORED, ['second_key' => '', 'oauth_client_secret' => '']));
+
+        self::assertTrue($form->isValid());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function invalidFields(): iterable
+    {
+        yield 'empty POS ID' => ['pos_id', ''];
+        yield 'non-numeric POS ID' => ['pos_id', '30004a'];
+        yield 'empty second key' => ['second_key', ''];
+        yield 'empty OAuth client ID' => ['oauth_client_id', ''];
+        yield 'empty OAuth client secret' => ['oauth_client_secret', ''];
+    }
+
+    #[DataProvider('invalidFields')]
+    public function test_invalid_field_is_rejected_in_the_admin_validation_group(string $field, string $value): void
+    {
+        $form = $this->adminForm(null);
+
+        $form->submit(array_merge(self::STORED, [$field => $value]));
+
+        self::assertFalse($form->isValid());
+        self::assertCount(1, $form->get($field)->getErrors());
+    }
+
+    public function test_constraints_apply_only_to_the_sylius_validation_group(): void
+    {
+        $form = $this->factory->create(PayUGatewayConfigurationType::class);
+
+        $form->submit(array_merge(self::STORED, ['pos_id' => '', 'second_key' => '']));
+
+        self::assertTrue($form->isValid());
+    }
+
+    /**
+     * @param array<string, string>|null $data
+     *
+     * @return FormInterface<array<string, mixed>|null>
+     */
+    private function adminForm(?array $data): FormInterface
+    {
+        return $this->factory->create(PayUGatewayConfigurationType::class, $data, ['validation_groups' => ['sylius']]);
     }
 }
