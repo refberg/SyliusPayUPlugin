@@ -104,7 +104,7 @@ The notification URL is sent to PayU with every order, so it does not have to be
 It is `https://<your-shop>/payment-methods/<PAYMENT_METHOD_CODE>`.
 
 Keep **automatic collection (autoReceive)** enabled for the POS in the PayU panel.
-Orders waiting for manual confirmation (`WAITING_FOR_CONFIRMATION`) stay unpaid in Sylius.
+Orders waiting for manual confirmation (`WAITING_FOR_CONFIRMATION`) keep the Sylius payment `processing` (unpaid).
 
 PayU retries a notification until it gets HTTP 200, for up to 72 hours. If your firewall filters incoming traffic,
 allow the PayU notification servers:
@@ -191,11 +191,15 @@ $paymentMethodRepository->add($paymentMethod);
 1. The customer places the order and clicks **Pay**. A PayU order is created and the customer is redirected to PayU.
 2. After the payment the customer returns to the shop (`/order/after-pay/{hash}`). The plugin asks the PayU API
    for the order status. Query parameters added by PayU (e.g. `error=501`) are ignored.
-   While PayU is still processing the payment, the customer sees the thank-you page and the payment stays unpaid.
+   While PayU is still processing the payment, the customer sees the thank-you page and the payment is `processing` (unpaid).
 3. PayU sends a notification to `/payment-methods/{code}`. The payment is completed or failed based on
    the order state read from the PayU API.
 
-Opening the pay page again reuses the PayU order that is still in progress, instead of creating a new one.
+Opening the pay page again reuses the PayU order that is still unpaid (`NEW`), instead of creating a new one.
+While the PayU order is `PENDING` or `WAITING_FOR_CONFIRMATION`, **Pay** leads to the thank-you page
+(see [Payment state rules](#payment-state-rules)).
+Once the notification or the status check finds that PayU order completed or canceled, its capture payment request
+is completed or failed, so **Pay** creates a new PayU order instead of sending the customer to a finished one.
 
 ### API
 
@@ -231,17 +235,45 @@ Content-Type: application/ld+json
 
 | PayU order status                      | Sylius payment                                                           |
 |----------------------------------------|--------------------------------------------------------------------------|
-| `NEW`, `PENDING`, `WAITING_FOR_CONFIRMATION` | unchanged (`new`)                                                  |
+| `NEW`                                  | unchanged (`new`)                                                        |
+| `PENDING`, `WAITING_FOR_CONFIRMATION`  | `processing`, only from `new` and only when the payment still uses a PayU method |
 | `COMPLETED`                            | `completed`, once                                                        |
-| `CANCELED`                             | `failed`, only when no other PayU order of this payment is still open    |
+| `CANCELED`                             | `failed`, only when no other PayU order of this payment is still open and the payment still uses a PayU method |
 
 A payment that is completed is never moved back. If a second PayU order of the same payment is paid
 (for example after the customer retried in another tab), the Sylius order is not paid twice. The plugin
-records a warning in the payment details (`refberg_payu.warnings`) and logs an error on the `payu` channel.
-Refund that payment manually in the PayU panel.
+records a warning in the payment details (`refberg_payu.warnings`) and logs a critical message on the `payu` channel.
+The same applies to a PayU order paid after the payment failed or was cancelled in Sylius
+(`payment_completed_after_failure` warning). Refund such a payment manually in the PayU panel.
+
+While the payment is `processing`, Sylius does not let the customer change its payment method in the shop or through
+the API: the shop order page shows no payment method choice, **Pay** leads to the thank-you page, and
+`PATCH /api/v2/shop/orders/{tokenValue}/payments/{paymentId}` ends with HTTP 500 from the Sylius core
+(`Assert::same` in `PaymentMethodChanger`), not with a 4xx error. The API still accepts
+`POST /api/v2/shop/orders/{tokenValue}/payment-requests` with another payment method for a `processing` payment,
+because the Sylius core does not block it. The PayU capture rejects a payment that is not `new`, but the gateway
+of another method may handle it; the plugin leaves this decision to Sylius. When PayU then cancels the order,
+the payment fails and Sylius adds a new payment to the order, so the customer can pay again.
+
+If the payment still has another open PayU order in `NEW` (for example, the cancel request sent to PayU
+when the customer switched the payment method failed) and PayU cancels the `PENDING` order, the payment stays
+`processing` until that other order is cancelled or expires, or an administrator changes the payment state.
+
+When the customer switches to another payment method while the PayU order is still `NEW`, Sylius cancels the capture
+payment request and the plugin asks PayU to cancel that order. The answer is only logged: PayU answers with success
+also for an order it did not cancel, so the order status changes only with a notification or a status check.
+A `CANCELED` order of a payment that now uses a method outside PayU does not fail the payment.
+
+The payment becomes `processing` only when the plugin learns the `PENDING` status. If the customer starts paying in PayU
+while the order is still `NEW` locally and switches the method before the `PENDING` notification or a status check arrives,
+the switch is allowed. A later `PENDING` does not move that payment to `processing`, because it no longer uses a PayU
+method, so the shop **Pay** page pays with the other method without any PayU check. If both payments succeed,
+the PayU one gets the `payment_completed_after_failure` or `paid_with_previous_payment_method` warning
+(see above); refund the extra payment manually.
 
 If the customer switches the order to another payment method after being redirected to PayU, the PayU order
-created before the switch stays linked to the payment and can still be paid. The payment is completed by its notification
+created before the switch stays linked to the payment. It can still be paid only if it was not cancelled: it was
+not `NEW` locally at the switch (so the plugin did not ask PayU to cancel it) or PayU did not cancel it. The payment is completed by its notification
 or by a status check (the customer's return from PayU or the `status` payment request through the API) once
 the PayU API confirms the order is paid; the plugin sets the payment method back to the PayU method that was paid,
 records the `paid_with_previous_payment_method` warning and logs a warning. Refunds of that payment from Sylius
@@ -252,7 +284,8 @@ reach that order:
 
 - Another PayU method: the cancellation is sent with the new method's credentials. For an order of another POS PayU
   is expected to refuse it; the payment request then fails and an error is logged.
-- A method outside PayU: the cancellation is not sent to PayU. The old PayU order stays open; if the customer pays it,
+- A method outside PayU: the cancellation is not sent to PayU. The old PayU order stays open unless it was cancelled
+  at the method switch (see above); if the customer pays it,
   the payment stays cancelled and gets the `payment_completed_after_failure` warning.
 
 In both cases refund or cancel the order in the PayU panel.

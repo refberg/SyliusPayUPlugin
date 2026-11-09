@@ -104,7 +104,7 @@ Adres powiadomień jest przekazywany do PayU przy każdym zamówieniu, więc nie
 Ma postać `https://<twój-sklep>/payment-methods/<KOD_METODY_PŁATNOŚCI>`.
 
 W panelu PayU zostaw włączony **automatyczny odbiór płatności (autoReceive)** dla punktu płatności.
-Zamówienia czekające na ręczne potwierdzenie (`WAITING_FOR_CONFIRMATION`) pozostają w Syliusie nieopłacone.
+Przy zamówieniach czekających na ręczne potwierdzenie (`WAITING_FOR_CONFIRMATION`) płatność w Syliusie ma stan `processing` (nieopłacona).
 
 PayU ponawia powiadomienie, dopóki nie dostanie odpowiedzi HTTP 200, maksymalnie przez 72 godziny. Jeśli firewall
 filtruje ruch przychodzący, dopuść serwery powiadomień PayU:
@@ -191,11 +191,16 @@ $paymentMethodRepository->add($paymentMethod);
 1. Klient składa zamówienie i klika **Zapłać**. Plugin tworzy zamówienie w PayU i przekierowuje klienta do PayU.
 2. Po płatności klient wraca do sklepu (`/order/after-pay/{hash}`). Plugin pyta API PayU o status zamówienia.
    Parametry dodane przez PayU do adresu powrotu (np. `error=501`) są ignorowane.
-   Dopóki PayU przetwarza płatność, klient widzi stronę podziękowania, a płatność pozostaje nieopłacona.
+   Dopóki PayU przetwarza płatność, klient widzi stronę podziękowania, a płatność ma stan `processing` (nieopłacona).
 3. PayU wysyła powiadomienie na `/payment-methods/{code}`. Płatność zostaje opłacona albo oznaczona jako nieudana
    na podstawie stanu zamówienia pobranego z API PayU.
 
-Ponowne otwarcie strony płatności używa zamówienia PayU, które jest jeszcze w toku, zamiast tworzyć nowe.
+Ponowne otwarcie strony płatności używa zamówienia PayU, które jest jeszcze nieopłacone (`NEW`), zamiast tworzyć nowe.
+Gdy zamówienie PayU ma status `PENDING` albo `WAITING_FOR_CONFIRMATION`, **Zapłać** prowadzi na stronę podziękowania
+(patrz [Reguły zmiany stanu płatności](#reguły-zmiany-stanu-płatności)).
+Gdy powiadomienie albo sprawdzenie statusu wykaże, że to zamówienie PayU zostało opłacone lub anulowane, jego żądanie
+płatności capture zostaje zakończone albo oznaczone jako nieudane, więc **Zapłać** tworzy nowe zamówienie PayU,
+zamiast kierować klienta do zakończonego.
 
 ### API
 
@@ -231,17 +236,46 @@ Content-Type: application/ld+json
 
 | Status zamówienia PayU                       | Płatność w Syliusie                                                        |
 |----------------------------------------------|----------------------------------------------------------------------------|
-| `NEW`, `PENDING`, `WAITING_FOR_CONFIRMATION` | bez zmian (`new`)                                                          |
+| `NEW`                                        | bez zmian (`new`)                                                          |
+| `PENDING`, `WAITING_FOR_CONFIRMATION`        | `processing`, tylko ze stanu `new` i tylko gdy płatność nadal ma metodę PayU |
 | `COMPLETED`                                  | `completed`, jednokrotnie                                                  |
-| `CANCELED`                                   | `failed`, tylko gdy żadne inne zamówienie PayU tej płatności nie jest otwarte |
+| `CANCELED`                                   | `failed`, tylko gdy żadne inne zamówienie PayU tej płatności nie jest otwarte, a płatność nadal ma metodę PayU |
 
 Opłacona płatność nigdy nie wraca do wcześniejszego stanu. Jeśli zostanie opłacone drugie zamówienie PayU tej
 samej płatności (np. klient ponowił płatność w innej karcie), zamówienie w Syliusie nie zostanie opłacone dwa razy.
-Plugin zapisuje ostrzeżenie w szczegółach płatności (`refberg_payu.warnings`) i loguje błąd na kanale `payu`.
-Taką płatność trzeba zwrócić ręcznie w panelu PayU.
+Plugin zapisuje ostrzeżenie w szczegółach płatności (`refberg_payu.warnings`) i loguje komunikat krytyczny (`critical`)
+na kanale `payu`. Tak samo jest z zamówieniem PayU opłaconym po tym, jak płatność w Syliusie stała się nieudana
+albo została anulowana (ostrzeżenie `payment_completed_after_failure`). Taką płatność trzeba zwrócić ręcznie w panelu PayU.
+
+Dopóki płatność ma stan `processing`, Sylius nie pozwala klientowi zmienić jej metody w sklepie ani przez API:
+strona zamówienia w sklepie nie pokazuje wyboru metody płatności, **Zapłać** prowadzi na stronę podziękowania,
+a `PATCH /api/v2/shop/orders/{tokenValue}/payments/{paymentId}` kończy się błędem HTTP 500 z rdzenia Syliusa
+(`Assert::same` w `PaymentMethodChanger`), a nie błędem 4xx. API nadal przyjmuje
+`POST /api/v2/shop/orders/{tokenValue}/payment-requests` z inną metodą płatności dla płatności `processing`,
+bo rdzeń Syliusa tego nie blokuje. Capture PayU odrzuca płatność, która nie ma stanu `new`, ale bramka innej metody
+może ją obsłużyć; plugin zostawia tę decyzję Syliusowi. Gdy PayU potem anuluje zamówienie,
+płatność staje się nieudana, a Sylius dodaje do zamówienia nową płatność, więc klient może zapłacić ponownie.
+
+Jeśli płatność ma jeszcze inne otwarte zamówienie PayU o statusie `NEW` (np. nie powiodła się prośba do PayU
+o anulowanie przy zmianie metody płatności), a PayU anuluje zamówienie `PENDING`, płatność zostaje w stanie
+`processing`, dopóki tamto zamówienie nie zostanie anulowane albo nie wygaśnie, albo administrator nie zmieni
+stanu płatności.
+
+Gdy klient zmieni metodę płatności, a zamówienie PayU ma jeszcze status `NEW`, Sylius anuluje żądanie płatności capture,
+a plugin prosi PayU o anulowanie tego zamówienia. Odpowiedź trafia tylko do logu: PayU odpowiada sukcesem także dla
+zamówienia, którego nie anulowało, więc status zamówienia zmienia dopiero powiadomienie albo sprawdzenie statusu.
+Zamówienie `CANCELED` płatności, która ma już metodę spoza PayU, nie oznacza płatności jako nieudanej.
+
+Płatność przechodzi w stan `processing` dopiero, gdy plugin pozna status `PENDING`. Jeśli klient zacznie płacić w PayU,
+gdy zamówienie ma jeszcze lokalnie status `NEW`, i zmieni metodę, zanim dotrze powiadomienie `PENDING` albo sprawdzenie
+statusu, zmiana przejdzie. Późniejszy `PENDING` nie przenosi tej płatności w stan `processing`, bo nie ma ona już metody
+PayU, więc strona **Zapłać** w sklepie płaci inną metodą bez sprawdzania PayU. Jeśli obie płatności się powiodą, płatność PayU
+dostaje ostrzeżenie `payment_completed_after_failure` albo `paid_with_previous_payment_method` (patrz wyżej);
+nadmiarową płatność trzeba zwrócić ręcznie.
 
 Jeśli klient po przekierowaniu do PayU zmieni w zamówieniu metodę płatności, zamówienie PayU utworzone przed zmianą
-nadal należy do płatności i można je opłacić. Płatność opłaca powiadomienie albo sprawdzenie statusu (powrót klienta
+nadal należy do płatności. Można je opłacić tylko wtedy, gdy nie zostało anulowane: w chwili zmiany nie miało
+lokalnie statusu `NEW` (więc plugin nie prosił PayU o anulowanie) albo PayU go nie anulowało. Płatność opłaca powiadomienie albo sprawdzenie statusu (powrót klienta
 z PayU lub żądanie płatności `status` przez API), gdy API PayU potwierdzi opłacenie zamówienia; plugin przywraca
 w płatności opłaconą metodę PayU, zapisuje ostrzeżenie `paid_with_previous_payment_method` i loguje ostrzeżenie.
 Dzięki temu zwroty tej płatności z Syliusa trafiają do PayU.
@@ -251,7 +285,8 @@ może do tego zamówienia nie trafić:
 
 - Inna metoda PayU: anulowanie jest wysyłane z danymi dostępowymi nowej metody. Dla zamówienia z innego POS PayU
   powinno je odrzucić; żądanie jest wtedy oznaczane jako nieudane, a błąd trafia do logu.
-- Metoda spoza PayU: anulowanie nie trafia do PayU. Stare zamówienie PayU zostaje otwarte; jeśli klient je opłaci,
+- Metoda spoza PayU: anulowanie nie trafia do PayU. Stare zamówienie PayU zostaje otwarte, chyba że zostało anulowane
+  przy zmianie metody (patrz wyżej); jeśli klient je opłaci,
   płatność pozostaje anulowana i dostaje ostrzeżenie `payment_completed_after_failure`.
 
 W obu przypadkach zwrot lub anulowanie trzeba zrobić w panelu PayU.

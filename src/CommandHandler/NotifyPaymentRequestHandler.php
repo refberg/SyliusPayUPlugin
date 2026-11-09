@@ -20,7 +20,9 @@ use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
+use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentTransitions;
+use Sylius\Component\Payment\Repository\PaymentRequestRepositoryInterface;
 use function in_array;
 
 /**
@@ -36,6 +38,9 @@ final readonly class NotifyPaymentRequestHandler
 {
     use PaymentRequestHandlerTrait;
 
+    /**
+     * @param PaymentRequestRepositoryInterface<PaymentRequestInterface>|null $paymentRequestRepository
+     */
     public function __construct(
         private PaymentRequestProviderInterface $paymentRequestProvider,
         private CredentialsResolverInterface $credentialsResolver,
@@ -44,6 +49,7 @@ final readonly class NotifyPaymentRequestHandler
         private PaymentLockerInterface $paymentLocker,
         private StateMachineInterface $stateMachine,
         private LoggerInterface $logger = new NullLogger(),
+        private ?PaymentRequestRepositoryInterface $paymentRequestRepository = null,
     ) {
     }
 
@@ -101,6 +107,7 @@ final readonly class NotifyPaymentRequestHandler
         if (PaymentStateApplierInterface::RESULT_COMPLETED === $result) {
             $this->restorePaidMethod($payment, $method, $notification->orderId);
         }
+        $this->closeCaptureRequests($this->paymentRequestRepository, $payment, $notification->orderId);
 
         $this->completeRequest($paymentRequest, [
             'type' => Notification::TYPE_ORDER,

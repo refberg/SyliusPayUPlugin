@@ -8,6 +8,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\TestWith;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
+use Sylius\Component\Core\Model\AdjustmentInterface;
+use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentRequestTransitions;
@@ -80,7 +82,7 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
         $this->client->request('GET', (string) parse_url($this->payu->order($orderId)['continueUrl'], PHP_URL_PATH));
 
         self::assertStringContainsString('/order/thank-you', (string) $this->client->getResponse()->headers->get('Location'));
-        self::assertSame('new', $this->reloadPayment($payment)->getState());
+        self::assertSame('processing', $this->reloadPayment($payment)->getState());
     }
 
     public function test_returning_after_payu_completed_the_payment_marks_it_paid(): void
@@ -429,6 +431,184 @@ final class ShopPaymentFlowTest extends IntegrationTestCase
         self::assertSame(Response::HTTP_OK, $this->notify($body, FakePayU::signatureHeader($body, 'other-second-key'), 'PAYU2')->getStatusCode());
 
         self::assertSame('new', $this->reloadPayment($payment)->getState());
+    }
+
+    #[TestWith(['notification'])]
+    #[TestWith(['return'])]
+    public function test_capture_request_is_completed_when_payu_completes_the_order(string $confirmedBy): void
+    {
+        $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+        $this->payu->setOrderStatus($orderId, 'COMPLETED');
+
+        if ('notification' === $confirmedBy) {
+            self::assertSame(Response::HTTP_OK, $this->notifyOrder($orderId)->getStatusCode());
+        } else {
+            $this->client->request('GET', (string) parse_url($this->payu->order($orderId)['continueUrl'], PHP_URL_PATH));
+            self::assertTrue($this->client->getResponse()->isRedirect());
+        }
+
+        $captures = $this->paymentRequests(PaymentRequestInterface::ACTION_CAPTURE);
+        self::assertCount(1, $captures);
+        self::assertSame(PaymentRequestInterface::STATE_COMPLETED, $captures[0]->getState());
+        self::assertSame($orderId, $captures[0]->getResponseData()['order_id'] ?? null);
+    }
+
+    public function test_paying_again_after_payu_canceled_the_order_creates_a_new_payu_order(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $firstOrderId = $this->payu->lastOrderId();
+        $this->finalizeCaptureRequests(PaymentRequestTransitions::TRANSITION_FAIL);
+        $this->payInShop();
+        $canceledOrderId = $this->payu->lastOrderId();
+
+        // The first PayU order is still open, so the payment stays new.
+        $this->payu->setOrderStatus($canceledOrderId, 'CANCELED');
+        self::assertSame(Response::HTTP_OK, $this->notifyOrder($canceledOrderId)->getStatusCode());
+        self::assertSame('new', $this->reloadPayment($payment)->getState());
+        foreach ($this->paymentRequests(PaymentRequestInterface::ACTION_CAPTURE) as $capture) {
+            self::assertSame(PaymentRequestInterface::STATE_FAILED, $capture->getState());
+        }
+
+        $redirect = $this->payInShop();
+
+        $newOrderId = $this->payu->lastOrderId();
+        self::assertNotContains($newOrderId, [$firstOrderId, $canceledOrderId]);
+        self::assertSame('https://merch-prod.snd.payu.com/pay/?orderId=' . $newOrderId, $redirect);
+    }
+
+    public function test_customer_cannot_switch_payment_method_or_pay_again_while_payu_processes_the_payment(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->createBankTransferMethod($this->reloadPayment($payment));
+        $this->em()->flush();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+        $this->payu->setOrderStatus($orderId, 'PENDING');
+        $this->client->request('GET', (string) parse_url($this->payu->order($orderId)['continueUrl'], PHP_URL_PATH));
+
+        $crawler = $this->client->request('GET', '/en_US/order/order-token');
+        self::assertCount(1, $crawler->filterXPath('//form[@name="sylius_checkout_select_payment"]'));
+        self::assertCount(0, $crawler->filterXPath('//select[@name="sylius_checkout_select_payment[payments][0][method]"] | //input[@name="sylius_checkout_select_payment[payments][0][method]"]'));
+
+        $this->client->request('GET', '/en_US/order/order-token/pay');
+
+        self::assertStringContainsString('/order/thank-you', (string) $this->client->getResponse()->headers->get('Location'));
+        $payment = $this->reloadPayment($payment);
+        self::assertSame('processing', $payment->getState());
+        self::assertSame(self::METHOD_CODE, $payment->getMethod()?->getCode());
+        self::assertSame([$orderId], $this->payu->orderIds());
+        self::assertSame([], $this->payu->requests('DELETE'));
+    }
+
+    public function test_paying_again_after_payu_canceled_a_processing_payment_creates_a_new_payment_and_payu_order(): void
+    {
+        $payment = $this->createPlacedOrder();
+        // Sylius adds a new payment only to an order with a non-zero total.
+        $adjustment = $this->factory('adjustment')->createNew();
+        self::assertInstanceOf(AdjustmentInterface::class, $adjustment);
+        $adjustment->setType(AdjustmentInterface::SHIPPING_ADJUSTMENT);
+        $adjustment->setLabel('Shipping');
+        $adjustment->setAmount(1500);
+        $this->reloadPayment($payment)->getOrder()?->addAdjustment($adjustment);
+        $this->em()->flush();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+        $this->payu->setOrderStatus($orderId, 'PENDING');
+        self::assertSame(Response::HTTP_OK, $this->notifyOrder($orderId)->getStatusCode());
+        self::assertSame('processing', $this->reloadPayment($payment)->getState());
+
+        $this->payu->setOrderStatus($orderId, 'CANCELED');
+        self::assertSame(Response::HTTP_OK, $this->notifyOrder($orderId)->getStatusCode());
+
+        $payment = $this->reloadPayment($payment);
+        self::assertSame('failed', $payment->getState());
+        $newPayment = $payment->getOrder()?->getLastPayment(PaymentInterface::STATE_NEW);
+        self::assertInstanceOf(PaymentInterface::class, $newPayment);
+        self::assertNotSame($payment->getId(), $newPayment->getId());
+
+        $redirect = $this->payInShop();
+
+        $newOrderId = $this->payu->lastOrderId();
+        self::assertNotSame($orderId, $newOrderId);
+        self::assertSame('https://merch-prod.snd.payu.com/pay/?orderId=' . $newOrderId, $redirect);
+        self::assertSame($newOrderId, $this->details($newPayment)->getCurrentOrderId());
+    }
+
+    public function test_switching_payment_method_asks_payu_to_cancel_the_new_order_without_recording_it(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+
+        $payment = $this->reloadPayment($payment);
+        $payment->setMethod($this->createBankTransferMethod($payment));
+        $this->em()->flush();
+
+        self::assertCount(1, $this->payu->requests('DELETE', '#^/api/v2_1/orders/' . $orderId . '$#'));
+        self::assertSame('NEW', $this->details($payment)->getOrderStatus($orderId));
+        self::assertSame(PaymentRequestInterface::STATE_CANCELLED, $this->paymentRequests(PaymentRequestInterface::ACTION_CAPTURE)[0]->getState());
+        self::assertSame('new', $this->reloadPayment($payment)->getState());
+    }
+
+    public function test_payu_error_while_cancelling_the_new_order_does_not_block_the_payment_method_switch(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+        $captureResponse = $this->paymentRequests(PaymentRequestInterface::ACTION_CAPTURE)[0]->getResponseData();
+        $this->payu->failNextRequest(503);
+
+        $payment = $this->reloadPayment($payment);
+        $payment->setMethod($this->createBankTransferMethod($payment));
+        $this->em()->flush();
+
+        self::assertCount(1, $this->payu->requests('DELETE', '#^/api/v2_1/orders/' . $orderId . '$#'));
+        $payment = $this->reloadPayment($payment);
+        self::assertSame('BANK_TRANSFER', $payment->getMethod()?->getCode());
+        self::assertSame('new', $payment->getState());
+        self::assertSame('NEW', PaymentDetails::of($payment)->getOrderStatus($orderId));
+        $capture = $this->paymentRequests(PaymentRequestInterface::ACTION_CAPTURE)[0];
+        self::assertSame(PaymentRequestInterface::STATE_CANCELLED, $capture->getState());
+        self::assertSame($captureResponse, $capture->getResponseData());
+        self::assertSame('NEW', $this->payu->order($orderId)['status']);
+    }
+
+    public function test_switching_payment_method_does_not_cancel_a_payu_order_that_is_not_new(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+        $this->payu->setOrderStatus($orderId, 'PENDING');
+        $this->notifyOrder($orderId);
+
+        $payment = $this->reloadPayment($payment);
+        $payment->setMethod($this->createBankTransferMethod($payment));
+        $this->em()->flush();
+
+        self::assertSame(PaymentRequestInterface::STATE_CANCELLED, $this->paymentRequests(PaymentRequestInterface::ACTION_CAPTURE)[0]->getState());
+        self::assertSame([], $this->payu->requests('DELETE'));
+    }
+
+    public function test_canceled_payu_order_after_the_customer_switched_payment_method_keeps_the_payment_new(): void
+    {
+        $payment = $this->createPlacedOrder();
+        $this->payInShop();
+        $orderId = $this->payu->lastOrderId();
+
+        $payment = $this->reloadPayment($payment);
+        $payment->setMethod($this->createBankTransferMethod($payment));
+        $this->em()->flush();
+
+        $this->payu->setOrderStatus($orderId, 'CANCELED');
+        self::assertSame(Response::HTTP_OK, $this->notifyOrder($orderId)->getStatusCode());
+
+        $payment = $this->reloadPayment($payment);
+        self::assertSame('new', $payment->getState());
+        self::assertSame('BANK_TRANSFER', $payment->getMethod()?->getCode());
+        self::assertSame('CANCELED', PaymentDetails::of($payment)->getOrderStatus($orderId));
     }
 
     private function finalizeCaptureRequests(string $transition): void
