@@ -11,6 +11,7 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
+use function count;
 
 final class CancelAndExternalRefundTest extends IntegrationTestCase
 {
@@ -19,10 +20,12 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
         $payment = $this->createPlacedOrder();
         $this->payInShop();
         $orderId = $this->payu->lastOrderId();
+        $retrievals = count($this->payu->requests('GET', '#^/api/v2_1/orders/' . $orderId . '$#'));
 
         $this->applyTransition($payment, PaymentTransitions::TRANSITION_CANCEL);
 
         self::assertCount(1, $this->payu->requests('DELETE', '#^/api/v2_1/orders/' . $orderId . '$#'));
+        self::assertCount($retrievals + 1, $this->payu->requests('GET', '#^/api/v2_1/orders/' . $orderId . '$#'));
         self::assertSame('CANCELED', $this->payu->order($orderId)['status']);
         self::assertSame('cancelled', $this->reloadPayment($payment)->getState());
         self::assertSame('CANCELED', $this->details($payment)->getOrderStatus($orderId));
@@ -62,8 +65,12 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
 
         $this->applyTransition($payment, PaymentTransitions::TRANSITION_CANCEL);
 
+        self::assertCount(1, $this->payu->requests('DELETE', '#^/api/v2_1/orders/' . $orderId . '$#'));
+        self::assertNotSame('CANCELED', $this->details($payment)->getOrderStatus($orderId));
         $requests = $this->paymentRequests(PaymentRequestInterface::ACTION_CANCEL);
         self::assertSame(PaymentRequestInterface::STATE_FAILED, $requests[0]->getState());
+        self::assertIsString(self::at($requests[0]->getResponseData(), 'error'));
+        self::assertStringContainsString('COMPLETED', self::at($requests[0]->getResponseData(), 'error'));
 
         $this->notifyOrder($orderId);
         $payment = $this->reloadPayment($payment);

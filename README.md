@@ -315,9 +315,10 @@ in the PayU panel. Sylius does not retry a failed request automatically, also wh
 ### Cancellation
 
 When a PayU payment is cancelled in Sylius (for example when the order is cancelled), the plugin cancels every
-PayU order of that payment that may still be paid (`DELETE /api/v2_1/orders/{orderId}`). If PayU refuses because
-the order was already paid, the cancel payment request is marked as failed and an error is logged; the later
-COMPLETED notification is recorded as a warning and the payment is not completed. Sylius does not retry a failed
+PayU order of that payment that may still be paid (`DELETE /api/v2_1/orders/{orderId}`) and then reads the order
+back, because PayU accepts the cancel of an already paid order too. If PayU refuses the cancel or the order is not
+`CANCELED` afterwards (for example it was already paid), the cancel payment request is marked as failed and an error
+is logged; the later COMPLETED notification is recorded as a warning and the payment is not completed. Sylius does not retry a failed
 cancel request automatically, also when PayU was unavailable (timeout, HTTP 5xx); check the order in the PayU panel.
 
 ### Refunds made in the PayU panel

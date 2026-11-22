@@ -315,9 +315,10 @@ Sylius nie ponawia nieudanego żądania automatycznie, także gdy PayU było nie
 ### Anulowanie
 
 Gdy płatność PayU zostanie anulowana w Syliusie (np. razem z zamówieniem), plugin anuluje w PayU wszystkie
-zamówienia tej płatności, które mogą jeszcze zostać opłacone (`DELETE /api/v2_1/orders/{orderId}`). Jeśli PayU
-odmówi, bo zamówienie zostało już opłacone, żądanie anulowania jest oznaczane jako nieudane i zapisywany jest błąd
-w logu. Późniejsze powiadomienie COMPLETED zostaje zapisane jako ostrzeżenie, a płatność nie zostaje opłacona.
+zamówienia tej płatności, które mogą jeszcze zostać opłacone (`DELETE /api/v2_1/orders/{orderId}`), a potem odczytuje
+zamówienie, bo PayU przyjmuje anulowanie także zamówienia już opłaconego. Jeśli PayU odmówi anulowania albo zamówienie
+nie jest potem `CANCELED` (np. zostało już opłacone), żądanie anulowania jest oznaczane jako nieudane i zapisywany
+jest błąd w logu. Późniejsze powiadomienie COMPLETED zostaje zapisane jako ostrzeżenie, a płatność nie zostaje opłacona.
 Sylius nie ponawia nieudanego żądania anulowania automatycznie, także gdy PayU było niedostępne (timeout, HTTP 5xx);
 sprawdź wtedy zamówienie w panelu PayU.
 

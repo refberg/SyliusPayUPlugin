@@ -31,6 +31,7 @@
 - Capture checks the payment state after acquiring the payment lock, so a payment completed in the meantime gets no new PayU order.
 - A notification is answered with HTTP 5xx, so PayU retries it, when the PayU API rejects the plugin credentials (HTTP 401/403).
 - A refund made in the PayU panel that is finalized after a PENDING notification marks the payment as refunded once finalized refunds cover it.
+- The cancel payment request completes only when PayU reports the order as `CANCELED` after the cancel call; PayU answers the cancel of a paid order with success, which the plugin used to record as canceled.
 
 ### Removed
 

@@ -162,7 +162,7 @@ final class PayUClientTest extends TestCase
         self::assertSame('r-1', $refund->extRefundId);
     }
 
-    public function test_it_cancels_an_open_order_but_not_a_completed_one(): void
+    public function test_cancel_succeeds_for_an_open_and_a_completed_order_but_cancels_only_the_open_one(): void
     {
         $client = $this->client();
         $open = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
@@ -170,10 +170,28 @@ final class PayUClientTest extends TestCase
         $this->payu->setOrderStatus($paid->orderId, 'COMPLETED');
 
         $client->cancelOrder(self::credentials(), $open->orderId);
+        $client->cancelOrder(self::credentials(), $paid->orderId);
+
         self::assertSame('CANCELED', $this->payu->order($open->orderId)['status']);
+        self::assertSame('COMPLETED', $this->payu->order($paid->orderId)['status']);
+    }
+
+    public function test_cancel_of_an_unknown_order_fails(): void
+    {
+        $this->expectException(PayUApiException::class);
+
+        $this->client()->cancelOrder(self::credentials(), 'UNKNOWN');
+    }
+
+    public function test_cancel_answered_with_http_200_without_success_status_fails(): void
+    {
+        $client = $this->client();
+        $created = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $this->payu->failNextRequest(200, 'ERROR_VALUE_INVALID');
 
         $this->expectException(PayUApiException::class);
-        $client->cancelOrder(self::credentials(), $paid->orderId);
+
+        $client->cancelOrder(self::credentials(), $created->orderId);
     }
 
     public function test_transport_errors_are_wrapped(): void
