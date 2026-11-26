@@ -18,6 +18,8 @@ use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
 use Tests\Refberg\SyliusPayUPlugin\Support\MemoryLogger;
@@ -488,6 +490,36 @@ final class PayUClientTest extends TestCase
         self::assertSame(4, $authorizations);
     }
 
+    public function test_oauth_request_disables_redirects_and_sets_accept_and_timeout(): void
+    {
+        $oauthOptions = [];
+        $httpClient = new MockHttpClient(function (string $method, string $url, array $options) use (&$oauthOptions): ResponseInterface {
+            /** @var array<string, mixed> $options */
+            if (str_contains($url, 'oauth/authorize')) {
+                $oauthOptions[] = $options;
+            }
+
+            return ($this->payu)($method, $url, $options);
+        });
+
+        (new AccessTokenProvider($httpClient, $this->cache, 7.5))->getToken(FakePayU::credentials());
+
+        self::assertCount(1, $oauthOptions);
+        self::assertSame(0, $oauthOptions[0]['max_redirects'] ?? null);
+        self::assertSame(7.5, $oauthOptions[0]['timeout'] ?? null);
+        self::assertSame('application/json', $this->payu->requests('POST', '#oauth/authorize#')[0]['headers']['accept'] ?? null);
+    }
+
+    public function test_token_expires_60_seconds_before_expires_in(): void
+    {
+        $this->assertTokenExpiresAfter(['access_token' => 'token', 'expires_in' => 300], 240);
+    }
+
+    public function test_token_without_expires_in_expires_after_one_second(): void
+    {
+        $this->assertTokenExpiresAfter(['access_token' => 'token'], 1);
+    }
+
     private function client(?FakePayU $payu = null): PayUClient
     {
         $httpClient = new MockHttpClient($payu ?? $this->payu);
@@ -502,6 +534,21 @@ final class PayUClientTest extends TestCase
             : $apiResponse);
 
         return new PayUClient($httpClient, new AccessTokenProvider($httpClient, $this->cache), $this->logger);
+    }
+
+    /**
+     * @param array<string, mixed> $oauthResponse
+     */
+    private function assertTokenExpiresAfter(array $oauthResponse, int $expectedSeconds): void
+    {
+        $item = $this->createMock(ItemInterface::class);
+        $item->expects(self::once())->method('expiresAfter')->with($expectedSeconds);
+        $cache = self::createStub(CacheInterface::class);
+        $cache->method('get')->willReturnCallback(static fn (string $key, callable $callback): mixed => $callback($item));
+
+        $token = (new AccessTokenProvider(new MockHttpClient(self::response(200, $oauthResponse)), $cache))->getToken(FakePayU::credentials());
+
+        self::assertSame('token', $token);
     }
 
     /**
