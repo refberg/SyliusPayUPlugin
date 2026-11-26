@@ -32,7 +32,8 @@ use function in_array;
  * then the order state is read from the PayU API, so a stale or replayed notification
  * cannot move the payment backwards.
  *
- * Transient PayU API failures and rejected plugin credentials are rethrown: the endpoint answers 5xx and PayU retries.
+ * Transient PayU API failures, rejected plugin credentials and a final refund status not yet shown by the PayU API are
+ * rethrown, so the notification is retried (by PayU after HTTP 5xx, or by Messenger with an asynchronous transport).
  */
 final readonly class NotifyPaymentRequestHandler
 {
@@ -99,9 +100,9 @@ final readonly class NotifyPaymentRequestHandler
                 return;
             }
 
-            // The body only decides to try later: PayU may notify before its API shows the final status, and 5xx makes PayU retry.
+            // The body only decides to try later: PayU may notify before its API shows the final status.
             if (RefundCreated::isFinalStatus($notification->refundStatus) && !RefundCreated::isFinalStatus($refund->status)) {
-                $this->logger->warning('PayU API does not show the notified final refund status yet; PayU will retry the notification.', [
+                $this->logger->warning('PayU API does not show the notified final refund status yet; the notification will be retried.', [
                     'payment_id' => $payment->getId(),
                     'payu_order_id' => $notification->orderId,
                     'payu_refund_id' => $refund->refundId,

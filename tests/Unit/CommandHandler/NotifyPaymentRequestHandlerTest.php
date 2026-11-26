@@ -186,7 +186,7 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
         self::assertSame('PENDING', PaymentDetails::of($payment)->refunds()['r-1']['status'] ?? null);
         self::assertSame([[
             'level' => 'warning',
-            'message' => 'PayU API does not show the notified final refund status yet; PayU will retry the notification.',
+            'message' => 'PayU API does not show the notified final refund status yet; the notification will be retried.',
             'context' => [
                 'payment_id' => 42,
                 'payu_order_id' => 'ORDER1',

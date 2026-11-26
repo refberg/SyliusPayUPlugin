@@ -117,8 +117,12 @@ For manual tests you can use the public PLN sandbox POS published in the
 
 If payment requests are processed asynchronously (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` other than `sync://`),
 set `framework.router.default_uri` to the public shop URL, so the notification URL is generated correctly.
-The notification endpoint then always answers with HTTP 200, so the HTTP 5xx answers and PayU retries described below
-do not apply; Messenger retries failed payment requests instead.
+Rejected notifications still get HTTP 400, 404 or 503 as described below, because they are checked before the payment
+request is dispatched. Errors while handling an accepted notification (PayU API unreachable or rejecting the plugin
+credentials, a final refund status not yet shown by the PayU API) get HTTP 200 instead of 5xx, so PayU does not retry.
+Messenger retries only these errors (not payment requests marked as failed), according to the `retry_strategy` of the
+`payment_request` transport, and then moves the message to the `payment_request_failed` failure transport. Configure
+a longer `retry_strategy` for that transport, or retry the messages with `messenger:failed:retry`.
 
 Requests to PayU (OAuth and REST API) use an idle timeout of 15 seconds, set by the `refberg_payu.http_timeout`
 parameter. To change it, set the parameter in the application configuration:

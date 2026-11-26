@@ -117,8 +117,12 @@ Do ręcznych testów możesz użyć publicznego punktu płatności PLN w sandbox
 
 Jeśli żądania płatności są przetwarzane asynchronicznie (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` inny niż `sync://`),
 ustaw `framework.router.default_uri` na publiczny adres sklepu, żeby adres powiadomień był generowany poprawnie.
-Endpoint powiadomień odpowiada wtedy zawsze HTTP 200, więc opisane niżej odpowiedzi HTTP 5xx i ponowienia przez PayU
-nie działają; nieudane żądania płatności ponawia Messenger.
+Odrzucone powiadomienia nadal dostają HTTP 400, 404 lub 503, jak opisano niżej, bo są sprawdzane przed wysłaniem
+żądania płatności. Błędy przy obsłudze przyjętego powiadomienia (API PayU niedostępne albo odrzuca dane dostępowe
+pluginu, końcowy status zwrotu jeszcze niewidoczny w API PayU) dają HTTP 200 zamiast 5xx, więc PayU go nie ponawia.
+Messenger ponawia tylko te błędy (nie żądania płatności oznaczone jako nieudane), zgodnie z `retry_strategy` transportu
+`payment_request`, a potem przenosi wiadomość do transportu błędów `payment_request_failed`. Ustaw dłuższe
+`retry_strategy` dla tego transportu albo ponów wiadomości poleceniem `messenger:failed:retry`.
 
 Żądania do PayU (OAuth i REST API) mają limit bezczynności 15 sekund, ustawiony parametrem `refberg_payu.http_timeout`.
 Aby go zmienić, ustaw parametr w konfiguracji aplikacji:
