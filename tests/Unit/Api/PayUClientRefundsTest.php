@@ -9,8 +9,6 @@ use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Api\AccessTokenProvider;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUApiException;
 use Refberg\SyliusPayUPlugin\Api\PayUClient;
-use Refberg\SyliusPayUPlugin\Config\Environment;
-use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
@@ -24,16 +22,16 @@ final class PayUClientRefundsTest extends TestCase
     {
         $payu = new FakePayU();
         $client = self::client($payu);
-        $orderId = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'))->orderId;
-        $otherOrderId = $client->createOrder(self::credentials(), self::orderBody('000002-1-bbbbbbbbbbbb'))->orderId;
+        $orderId = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'))->orderId;
+        $otherOrderId = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000002-1-bbbbbbbbbbbb'))->orderId;
         $payu->setOrderStatus($orderId, 'COMPLETED');
         $payu->setOrderStatus($otherOrderId, 'COMPLETED');
-        $client->createRefund(self::credentials(), $orderId, ['description' => 'Refund', 'amount' => 1500, 'currencyCode' => 'PLN', 'extRefundId' => 'r-1']);
-        $client->createRefund(self::credentials(), $otherOrderId, ['description' => 'Refund', 'amount' => 1500, 'currencyCode' => 'PLN', 'extRefundId' => 'r-2']);
+        $client->createRefund(FakePayU::credentials(), $orderId, ['description' => 'Refund', 'amount' => 1500, 'currencyCode' => 'PLN', 'extRefundId' => 'r-1']);
+        $client->createRefund(FakePayU::credentials(), $otherOrderId, ['description' => 'Refund', 'amount' => 1500, 'currencyCode' => 'PLN', 'extRefundId' => 'r-2']);
         $panelRefundId = $payu->createPanelRefund($orderId, 500);
         $payu->setRefundStatus($panelRefundId, 'FINALIZED');
 
-        $refunds = $client->retrieveRefunds(self::credentials(), $orderId);
+        $refunds = $client->retrieveRefunds(FakePayU::credentials(), $orderId);
 
         self::assertCount(2, $refunds);
         self::assertSame('r-1', $refunds[0]->extRefundId);
@@ -50,9 +48,9 @@ final class PayUClientRefundsTest extends TestCase
     {
         $payu = new FakePayU();
         $client = self::client($payu);
-        $orderId = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'))->orderId;
+        $orderId = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'))->orderId;
 
-        self::assertSame([], $client->retrieveRefunds(self::credentials(), $orderId));
+        self::assertSame([], $client->retrieveRefunds(FakePayU::credentials(), $orderId));
     }
 
     public function test_retrieving_the_refunds_of_an_unknown_order_fails(): void
@@ -60,7 +58,7 @@ final class PayUClientRefundsTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('Retrieving PayU refunds failed (HTTP 404, DATA_NOT_FOUND).');
 
-        self::client(new FakePayU())->retrieveRefunds(self::credentials(), 'UNKNOWN');
+        self::client(new FakePayU())->retrieveRefunds(FakePayU::credentials(), 'UNKNOWN');
     }
 
     public function test_response_without_the_refund_list_fails(): void
@@ -68,7 +66,7 @@ final class PayUClientRefundsTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('PayU refund list response has no "refunds" list.');
 
-        self::clientAnswering(['refunds' => 'none'])->retrieveRefunds(self::credentials(), 'ORDER1');
+        self::clientAnswering(['refunds' => 'none'])->retrieveRefunds(FakePayU::credentials(), 'ORDER1');
     }
 
     /**
@@ -85,7 +83,7 @@ final class PayUClientRefundsTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('PayU refund list response is incomplete.');
 
-        self::clientAnswering(['refunds' => [$complete, $refund]])->retrieveRefunds(self::credentials(), 'ORDER1');
+        self::clientAnswering(['refunds' => [$complete, $refund]])->retrieveRefunds(FakePayU::credentials(), 'ORDER1');
     }
 
     public function test_non_object_refund_in_the_list_fails(): void
@@ -93,7 +91,7 @@ final class PayUClientRefundsTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('PayU refund list response is incomplete.');
 
-        self::clientAnswering(['refunds' => ['5000000001']])->retrieveRefunds(self::credentials(), 'ORDER1');
+        self::clientAnswering(['refunds' => ['5000000001']])->retrieveRefunds(FakePayU::credentials(), 'ORDER1');
     }
 
     private static function client(FakePayU $payu): PayUClient
@@ -114,28 +112,5 @@ final class PayUClientRefundsTest extends TestCase
         ]);
 
         return new PayUClient($httpClient, new AccessTokenProvider($httpClient, new ArrayAdapter()));
-    }
-
-    private static function credentials(): PayUCredentials
-    {
-        return new PayUCredentials(FakePayU::POS_ID, FakePayU::SECOND_KEY, FakePayU::CLIENT_ID, FakePayU::CLIENT_SECRET, Environment::Sandbox);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function orderBody(string $extOrderId): array
-    {
-        return [
-            'notifyUrl' => 'https://shop.example/payment-methods/PAYU',
-            'continueUrl' => 'https://shop.example/after-pay',
-            'customerIp' => '127.0.0.1',
-            'merchantPosId' => FakePayU::POS_ID,
-            'description' => 'Order 000001',
-            'currencyCode' => 'PLN',
-            'totalAmount' => '1500',
-            'extOrderId' => $extOrderId,
-            'products' => [['name' => 'Order 000001', 'unitPrice' => '1500', 'quantity' => '1']],
-        ];
     }
 }

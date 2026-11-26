@@ -6,6 +6,8 @@ namespace Tests\Refberg\SyliusPayUPlugin\Support;
 
 use LogicException;
 use OutOfBoundsException;
+use Refberg\SyliusPayUPlugin\Config\Environment;
+use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use function array_filter;
@@ -259,6 +261,29 @@ final class FakePayU
             'extOrderId' => $order['extOrderId'],
             'refund' => $this->refunds[$refundId],
         ], JSON_THROW_ON_ERROR);
+    }
+
+    public static function credentials(): PayUCredentials
+    {
+        return new PayUCredentials(self::POS_ID, self::SECOND_KEY, self::CLIENT_ID, self::CLIENT_SECRET, Environment::Sandbox);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function orderBody(string $extOrderId): array
+    {
+        return [
+            'notifyUrl' => 'https://shop.example/payment-methods/PAYU',
+            'continueUrl' => 'https://shop.example/after-pay',
+            'customerIp' => '127.0.0.1',
+            'merchantPosId' => self::POS_ID,
+            'description' => 'Order 000001',
+            'currencyCode' => 'PLN',
+            'totalAmount' => '1500',
+            'extOrderId' => $extOrderId,
+            'products' => [['name' => 'Order 000001', 'unitPrice' => '1500', 'quantity' => '1']],
+        ];
     }
 
     public static function signatureHeader(string $body, string $secondKey = self::SECOND_KEY, string $algorithm = 'SHA-256'): string
