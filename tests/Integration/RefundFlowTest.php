@@ -67,6 +67,28 @@ final class RefundFlowTest extends IntegrationTestCase
         self::assertSame('refunded', $this->reloadPayment($payment)->getState());
     }
 
+    #[TestWith([null, Response::HTTP_OK, 'FINALIZED'])]
+    #[TestWith(['not-a-payment-request-hash', Response::HTTP_NOT_FOUND, 'PENDING'])]
+    public function test_refund_notification_without_ext_order_id_is_matched_by_ext_refund_id(?string $extRefundId, int $httpStatus, string $refundStatus): void
+    {
+        $payment = $this->paidPayment();
+        $orderId = $this->payu->lastOrderId();
+        $this->refundInAdmin($payment);
+        $refundId = (string) array_key_first($this->payu->refunds());
+
+        $data = json_decode($this->payu->refundNotificationBody($orderId, $refundId, 'FINALIZED'), true, 8, JSON_THROW_ON_ERROR);
+        self::assertIsArray($data);
+        self::assertIsArray($data['refund']);
+        unset($data['extOrderId']);
+        if (null !== $extRefundId) {
+            $data['refund']['extRefundId'] = $extRefundId;
+        }
+        $body = json_encode($data, JSON_THROW_ON_ERROR);
+
+        self::assertSame($httpStatus, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
+        self::assertSame($refundStatus, array_values($this->details($payment)->refunds())[0]['status']);
+    }
+
     public function test_refund_notification_with_wrong_signature_is_rejected(): void
     {
         $payment = $this->paidPayment();

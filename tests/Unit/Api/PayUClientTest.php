@@ -302,6 +302,16 @@ final class PayUClientTest extends TestCase
         $client->retrieveOrder(FakePayU::credentials(), 'ORDER1');
     }
 
+    public function test_response_without_orders_fails(): void
+    {
+        $client = $this->clientAnswering(self::response(200, ['status' => ['statusCode' => 'SUCCESS']]));
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('PayU order response has no "orders" list.');
+
+        $client->retrieveOrder(FakePayU::credentials(), 'ORDER1');
+    }
+
     /**
      * @return iterable<string, array{array<string, mixed>}>
      */
@@ -336,6 +346,16 @@ final class PayUClientTest extends TestCase
         $this->expectExceptionMessage('Creating PayU refund failed (HTTP 200, ERROR_VALUE_INVALID).');
 
         $client->createRefund(FakePayU::credentials(), $created->orderId, ['description' => 'Refund']);
+    }
+
+    public function test_refund_response_without_refund_fails(): void
+    {
+        $client = $this->clientAnswering(self::response(200, ['status' => ['statusCode' => 'SUCCESS']]));
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('PayU refund response has no "refund" object.');
+
+        $client->createRefund(FakePayU::credentials(), 'ORDER1', ['description' => 'Refund']);
     }
 
     /**

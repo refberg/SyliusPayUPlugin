@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\Order;
 
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Order\ExtOrderIdGenerator;
 use Sylius\Component\Core\Model\Order;
@@ -34,6 +35,15 @@ final class ExtOrderIdGeneratorTest extends TestCase
         );
     }
 
+    #[TestWith([null])]
+    #[TestWith(['#/ -'])]
+    public function test_order_number_without_allowed_characters_is_replaced(?string $number): void
+    {
+        $id = (new ExtOrderIdGenerator())->generate($this->payment(42, $number), $this->paymentRequest('3f2504e0-4f89-11d3-9a0c-0305e82c3301'));
+
+        self::assertSame('order-42-3f2504e04f89', $id);
+    }
+
     public function test_it_does_not_extract_from_foreign_ids(): void
     {
         $generator = new ExtOrderIdGenerator();
@@ -50,7 +60,7 @@ final class ExtOrderIdGeneratorTest extends TestCase
         (new ExtOrderIdGenerator())->generate($this->payment(null, '1'), $this->paymentRequest(null));
     }
 
-    private function payment(?int $id, string $number): PaymentInterface
+    private function payment(?int $id, ?string $number): PaymentInterface
     {
         $order = new Order();
         $order->setNumber($number);
