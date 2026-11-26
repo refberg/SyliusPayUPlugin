@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\CommandHandler;
 
+use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUApiException;
 use Refberg\SyliusPayUPlugin\Api\Model\PayUOrder;
@@ -25,6 +26,7 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
 use Tests\Refberg\SyliusPayUPlugin\Support\MemoryLogger;
 use Tests\Refberg\SyliusPayUPlugin\Support\PaymentStateMachine;
+use function count;
 
 final class CancelPaymentRequestHandlerTest extends TestCase
 {
@@ -75,11 +77,39 @@ final class CancelPaymentRequestHandlerTest extends TestCase
     }
 
     /**
+     * @param array<string, mixed> $responseData
+     */
+    #[TestWith([false, PayUOrder::STATUS_CANCELED, ['canceled_order_ids' => ['ORDER2', 'ORDER1']]])]
+    #[TestWith([true, PayUOrder::STATUS_NEW, ['error' => 'Canceling PayU order failed (HTTP 500).']])]
+    public function test_every_open_order_is_canceled_even_after_a_failure(bool $firstCancelFails, string $firstOrderStatus, array $responseData): void
+    {
+        $cancelCalls = [];
+        $client = $this->createMock(PayUClientInterface::class);
+        $client->expects(self::exactly(2))->method('cancelOrder')->willReturnCallback(static function (PayUCredentials $credentials, string $orderId) use (&$cancelCalls, $firstCancelFails): void {
+            $cancelCalls[] = $orderId;
+            if ($firstCancelFails && 1 === count($cancelCalls)) {
+                throw new PayUApiException('Canceling PayU order failed (HTTP 500).', 500);
+            }
+        });
+        $client->method('retrieveOrder')->willReturnCallback(static fn (PayUCredentials $credentials, string $orderId): PayUOrder => self::order($orderId, PayUOrder::STATUS_CANCELED));
+        $locker = $this->createMock(PaymentLockerInterface::class);
+        $locker->expects(self::once())->method('lock');
+
+        [$payment, $request] = $this->handle($client, ['ORDER1', 'ORDER2'], locker: $locker);
+
+        self::assertSame(['ORDER2', 'ORDER1'], $cancelCalls);
+        self::assertSame($responseData, $request->getResponseData());
+        $details = PaymentDetails::of($payment);
+        self::assertSame($firstOrderStatus, $details->getOrderStatus('ORDER2'));
+        self::assertSame(PayUOrder::STATUS_CANCELED, $details->getOrderStatus('ORDER1'));
+    }
+
+    /**
      * @param list<string> $orderIds
      *
      * @return array{Payment, PaymentRequestInterface}
      */
-    private function handle(PayUClientInterface $client, array $orderIds, MemoryLogger $logger = new MemoryLogger()): array
+    private function handle(PayUClientInterface $client, array $orderIds, MemoryLogger $logger = new MemoryLogger(), ?PaymentLockerInterface $locker = null): array
     {
         $method = self::payuMethod();
         $payment = new class() extends Payment {
@@ -106,7 +136,7 @@ final class CancelPaymentRequestHandlerTest extends TestCase
             $paymentRequestProvider,
             new CredentialsResolver(),
             $client,
-            self::createStub(PaymentLockerInterface::class),
+            $locker ?? self::createStub(PaymentLockerInterface::class),
             new PaymentStateMachine(),
             $logger,
         );
