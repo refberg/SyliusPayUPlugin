@@ -93,7 +93,9 @@ final class NotificationParserTest extends TestCase
         $withoutAmount = '{"orderId":"ORDER1","refund":{"refundId":"912","currencyCode":"PLN","status":"FINALIZED"}}';
 
         self::assertSame(1500, $this->parser->parse($withAmount, ['openpayu-signature' => [FakePayU::signatureHeader($withAmount)]], self::credentials())?->refundAmount);
-        self::assertNull($this->parser->parse($withoutAmount, ['openpayu-signature' => [FakePayU::signatureHeader($withoutAmount)]], self::credentials())?->refundAmount);
+        $notification = $this->parser->parse($withoutAmount, ['openpayu-signature' => [FakePayU::signatureHeader($withoutAmount)]], self::credentials());
+        self::assertNotNull($notification);
+        self::assertNull($notification->refundAmount);
     }
 
     private static function credentials(): PayUCredentials

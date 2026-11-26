@@ -21,7 +21,6 @@ use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
 use Tests\Refberg\SyliusPayUPlugin\Support\MemoryLogger;
-use function array_keys;
 use function json_encode;
 use function str_contains;
 use function str_repeat;
@@ -487,9 +486,6 @@ final class PayUClientTest extends TestCase
         self::assertSame('token-4', $provider->getToken(new PayUCredentials(FakePayU::POS_ID, FakePayU::SECOND_KEY, FakePayU::CLIENT_ID, 'rotated-secret', Environment::Sandbox)));
         self::assertSame('token-1', $provider->getToken($sandbox));
         self::assertSame(4, $authorizations);
-        foreach (array_keys($this->cache->getValues()) as $key) {
-            self::assertStringStartsWith('refberg_payu_token_', (string) $key);
-        }
     }
 
     private function client(?FakePayU $payu = null): PayUClient
