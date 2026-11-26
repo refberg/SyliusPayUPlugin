@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\Api;
 
 use LogicException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Api\AccessTokenProvider;
@@ -17,9 +18,13 @@ use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Contracts\HttpClient\ResponseInterface;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
 use Tests\Refberg\SyliusPayUPlugin\Support\MemoryLogger;
+use function array_keys;
 use function json_encode;
+use function str_contains;
+use function str_repeat;
 use const JSON_THROW_ON_ERROR;
 
 final class PayUClientTest extends TestCase
@@ -232,11 +237,293 @@ final class PayUClientTest extends TestCase
         }
     }
 
+    #[TestWith([200])]
+    #[TestWith([201])]
+    public function test_order_creation_accepts_http_200_and_201(int $httpStatus): void
+    {
+        $client = $this->clientAnswering(self::response($httpStatus, ['status' => ['statusCode' => 'SUCCESS'], 'orderId' => 'ORDER1', 'redirectUri' => 'https://merch-prod.snd.payu.com/pay/?orderId=ORDER1']));
+
+        self::assertSame('ORDER1', $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'))->orderId);
+    }
+
+    public function test_order_creation_without_success_status_fails(): void
+    {
+        $client = $this->clientAnswering(self::response(302, ['status' => ['statusCode' => 'ERROR_VALUE_INVALID'], 'orderId' => 'ORDER1', 'redirectUri' => 'https://merch-prod.snd.payu.com/pay/?orderId=ORDER1']));
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('Creating PayU order failed (HTTP 302, ERROR_VALUE_INVALID).');
+
+        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function invalidOrderCreatedResponses(): iterable
+    {
+        yield 'missing orderId' => [['status' => ['statusCode' => 'SUCCESS'], 'redirectUri' => 'https://merch-prod.snd.payu.com/pay/']];
+        yield 'plain http redirect' => [['status' => ['statusCode' => 'SUCCESS'], 'orderId' => 'ORDER1', 'redirectUri' => 'http://merch-prod.snd.payu.com/pay/']];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    #[DataProvider('invalidOrderCreatedResponses')]
+    public function test_order_response_without_order_id_or_with_http_redirect_fails(array $data): void
+    {
+        $client = $this->clientAnswering(self::response(302, $data));
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('PayU order response is missing orderId or redirectUri.');
+
+        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+    }
+
+    public function test_retrieve_order_error_reports_the_payu_status(): void
+    {
+        $client = $this->client();
+        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $this->payu->failNextRequest(200, 'DATA_NOT_FOUND');
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('Retrieving PayU order failed (HTTP 200, DATA_NOT_FOUND).');
+
+        $client->retrieveOrder(self::credentials(), $this->payu->lastOrderId());
+    }
+
+    public function test_response_with_only_another_order_fails(): void
+    {
+        $client = $this->clientAnswering(self::response(200, ['status' => ['statusCode' => 'SUCCESS'], 'orders' => [self::orderItem(['orderId' => 'OTHER'])]]));
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('PayU order response does not contain the requested order.');
+
+        $client->retrieveOrder(self::credentials(), 'ORDER1');
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function incompleteOrders(): iterable
+    {
+        yield 'missing status' => [['status' => null]];
+        yield 'non-numeric amount' => [['totalAmount' => 'abc']];
+        yield 'missing currency' => [['currencyCode' => null]];
+    }
+
+    /**
+     * @param array<string, mixed> $override
+     */
+    #[DataProvider('incompleteOrders')]
+    public function test_incomplete_order_fails(array $override): void
+    {
+        $client = $this->clientAnswering(self::response(200, ['status' => ['statusCode' => 'SUCCESS'], 'orders' => [self::orderItem($override)]]));
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('PayU order response is incomplete.');
+
+        $client->retrieveOrder(self::credentials(), 'ORDER1');
+    }
+
+    public function test_refund_without_success_status_fails(): void
+    {
+        $client = $this->client();
+        $created = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $this->payu->failNextRequest(200, 'ERROR_VALUE_INVALID');
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('Creating PayU refund failed (HTTP 200, ERROR_VALUE_INVALID).');
+
+        $client->createRefund(self::credentials(), $created->orderId, ['description' => 'Refund']);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function incompleteRefunds(): iterable
+    {
+        yield 'missing refundId' => [['refundId' => null]];
+        yield 'missing status' => [['status' => null]];
+        yield 'non-numeric amount' => [['amount' => 'abc']];
+        yield 'missing currency' => [['currencyCode' => null]];
+    }
+
+    /**
+     * @param array<string, mixed> $override
+     */
+    #[DataProvider('incompleteRefunds')]
+    public function test_incomplete_refund_response_fails(array $override): void
+    {
+        $refund = [...['refundId' => '5000001', 'status' => 'PENDING', 'amount' => '1500', 'currencyCode' => 'PLN'], ...$override];
+        $client = $this->clientAnswering(self::response(200, ['status' => ['statusCode' => 'SUCCESS'], 'refund' => $refund]));
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('PayU refund response is incomplete.');
+
+        $client->createRefund(self::credentials(), 'ORDER1', ['description' => 'Refund']);
+    }
+
+    public function test_requests_disable_redirects_and_set_timeout_and_accept(): void
+    {
+        $apiOptions = [];
+        $httpClient = new MockHttpClient(function (string $method, string $url, array $options) use (&$apiOptions): ResponseInterface {
+            /** @var array<string, mixed> $options */
+            if (str_contains($url, '/api/')) {
+                $apiOptions[] = $options;
+            }
+
+            return ($this->payu)($method, $url, $options);
+        });
+        $client = new PayUClient($httpClient, new AccessTokenProvider($httpClient, $this->cache), $this->logger, 7.5);
+
+        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+
+        self::assertCount(1, $apiOptions);
+        self::assertSame(0, $apiOptions[0]['max_redirects'] ?? null);
+        self::assertSame(7.5, $apiOptions[0]['timeout'] ?? null);
+        self::assertSame('application/json', $this->payu->requests('POST', '#^/api/v2_1/orders$#')[0]['headers']['accept'] ?? null);
+    }
+
+    public function test_persistent_401_is_retried_only_once(): void
+    {
+        $apiCalls = 0;
+        $httpClient = new MockHttpClient(static function (string $method, string $url) use (&$apiCalls): MockResponse {
+            if (str_contains($url, 'oauth/authorize')) {
+                return self::response(200, ['access_token' => 'token', 'expires_in' => 3600]);
+            }
+            if (++$apiCalls > 3) {
+                throw new LogicException('The 401 retry does not stop.');
+            }
+
+            return self::response(401, ['error' => 'invalid_token']);
+        });
+        $client = new PayUClient($httpClient, new AccessTokenProvider($httpClient, $this->cache));
+
+        try {
+            $client->retrieveOrder(self::credentials(), 'ORDER1');
+            self::fail('Expected an API exception.');
+        } catch (PayUApiException $exception) {
+            self::assertSame(401, $exception->getHttpStatusCode());
+        }
+
+        self::assertSame(2, $apiCalls);
+    }
+
+    public function test_error_message_contains_the_status_description_truncated_to_200_characters(): void
+    {
+        $client = $this->clientAnswering(self::response(400, ['status' => ['statusCode' => 'ERROR_VALUE_INVALID', 'statusDesc' => 'a' . str_repeat('ż', 250)]]));
+
+        $this->expectException(PayUApiException::class);
+        $this->expectExceptionMessage('Retrieving PayU order failed (HTTP 400, ERROR_VALUE_INVALID: a' . str_repeat('ż', 199) . ').');
+
+        $client->retrieveOrder(self::credentials(), 'ORDER1');
+    }
+
+    public function test_transport_error_after_authorization_is_wrapped(): void
+    {
+        $client = $this->clientAnswering(new MockResponse('', ['error' => 'Connection timed out']));
+
+        $this->expectException(PayUTransportException::class);
+        $this->expectExceptionMessage('Could not reach PayU API.');
+
+        $client->retrieveOrder(self::credentials(), 'ORDER1');
+    }
+
+    public function test_unreadable_body_is_mapped_to_an_api_error(): void
+    {
+        $client = $this->clientAnswering(new MockResponse('<html>Bad Gateway</html>', ['http_code' => 502]));
+
+        try {
+            $client->retrieveOrder(self::credentials(), 'ORDER1');
+            self::fail('Expected an API exception.');
+        } catch (PayUApiException $exception) {
+            self::assertSame('Retrieving PayU order failed (HTTP 502).', $exception->getMessage());
+            self::assertTrue($exception->isTransient());
+        }
+    }
+
+    public function test_oauth_failure_throws(): void
+    {
+        $credentials = new PayUCredentials(FakePayU::POS_ID, FakePayU::SECOND_KEY, FakePayU::CLIENT_ID, 'wrong-secret-value', Environment::Sandbox);
+
+        $this->expectException(PayUAuthenticationException::class);
+        $this->expectExceptionMessage('PayU OAuth authorization failed (HTTP 401). Check the OAuth client ID and secret.');
+
+        $this->client()->retrieveOrder($credentials, 'ORDER1');
+    }
+
+    public function test_empty_token_is_rejected(): void
+    {
+        $httpClient = new MockHttpClient(self::response(200, ['access_token' => '', 'expires_in' => 3600]));
+
+        $this->expectException(PayUAuthenticationException::class);
+        $this->expectExceptionMessage('PayU OAuth response did not contain an access token.');
+
+        (new AccessTokenProvider($httpClient, $this->cache))->getToken(self::credentials());
+    }
+
+    public function test_unreadable_oauth_response_is_an_authentication_error(): void
+    {
+        $httpClient = new MockHttpClient(new MockResponse('<html>Maintenance</html>', ['http_code' => 200]));
+
+        $this->expectException(PayUAuthenticationException::class);
+        $this->expectExceptionMessage('PayU OAuth endpoint returned an unreadable response.');
+
+        (new AccessTokenProvider($httpClient, $this->cache))->getToken(self::credentials());
+    }
+
+    public function test_tokens_are_cached_per_environment_and_client(): void
+    {
+        $authorizations = 0;
+        $httpClient = new MockHttpClient(static function () use (&$authorizations): MockResponse {
+            return self::response(200, ['access_token' => 'token-' . ++$authorizations, 'expires_in' => 3600]);
+        });
+        $provider = new AccessTokenProvider($httpClient, $this->cache);
+        $sandbox = self::credentials();
+
+        self::assertSame('token-1', $provider->getToken($sandbox));
+        self::assertSame('token-2', $provider->getToken(new PayUCredentials(FakePayU::POS_ID, FakePayU::SECOND_KEY, FakePayU::CLIENT_ID, FakePayU::CLIENT_SECRET, Environment::Production)));
+        self::assertSame('token-3', $provider->getToken(new PayUCredentials(FakePayU::POS_ID, FakePayU::SECOND_KEY, 'other-client', FakePayU::CLIENT_SECRET, Environment::Sandbox)));
+        self::assertSame('token-4', $provider->getToken(new PayUCredentials(FakePayU::POS_ID, FakePayU::SECOND_KEY, FakePayU::CLIENT_ID, 'rotated-secret', Environment::Sandbox)));
+        self::assertSame('token-1', $provider->getToken($sandbox));
+        self::assertSame(4, $authorizations);
+        foreach (array_keys($this->cache->getValues()) as $key) {
+            self::assertStringStartsWith('refberg_payu_token_', (string) $key);
+        }
+    }
+
     private function client(?FakePayU $payu = null): PayUClient
     {
         $httpClient = new MockHttpClient($payu ?? $this->payu);
 
         return new PayUClient($httpClient, new AccessTokenProvider($httpClient, $this->cache), $this->logger);
+    }
+
+    private function clientAnswering(MockResponse $apiResponse): PayUClient
+    {
+        $httpClient = new MockHttpClient(static fn (string $method, string $url): MockResponse => str_contains($url, 'oauth/authorize')
+            ? self::response(200, ['access_token' => 'token', 'expires_in' => 3600])
+            : $apiResponse);
+
+        return new PayUClient($httpClient, new AccessTokenProvider($httpClient, $this->cache), $this->logger);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private static function response(int $httpStatus, array $data): MockResponse
+    {
+        return new MockResponse(json_encode($data, JSON_THROW_ON_ERROR), ['http_code' => $httpStatus]);
+    }
+
+    /**
+     * @param array<string, mixed> $override
+     *
+     * @return array<string, mixed>
+     */
+    private static function orderItem(array $override = []): array
+    {
+        return [...['orderId' => 'ORDER1', 'extOrderId' => '000001-1-aaaaaaaaaaaa', 'status' => 'COMPLETED', 'totalAmount' => '1500', 'currencyCode' => 'PLN'], ...$override];
     }
 
     private static function credentials(): PayUCredentials

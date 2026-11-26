@@ -53,6 +53,14 @@ final class PayUOrderValidatorTest extends TestCase
         self::assertContains('PayU order is not linked to this payment', $errors);
     }
 
+    public function test_all_mismatches_are_reported(): void
+    {
+        self::assertSame(
+            ['PayU order is not linked to this payment', 'extOrderId does not match', 'merchantPosId does not match', 'amount does not match', 'currency does not match'],
+            $this->validate(new PayUOrder('OTHER', '000002-8-abcdef012345', 'COMPLETED', 1, 'EUR', '999999')),
+        );
+    }
+
     /**
      * @return list<string>
      */
