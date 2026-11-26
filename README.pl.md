@@ -32,8 +32,8 @@ Poza zakresem: zapisane karty, płatności cykliczne, osadzony formularz karty, 
 
 | Sylius  | PHP     | Symfony                                 |
 |---------|---------|-----------------------------------------|
-| 2.2.12+ | 8.2–8.4 | 6.4, 7.4                                |
-| 2.3.2+  | 8.3–8.5 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4+)     |
+| 2.2.13+ | 8.2–8.4 | 6.4, 7.4                                |
+| 2.3.3+  | 8.3–8.5 | 6.4, 7.4, 8.x (8.x wymaga PHP 8.4+)     |
 
 Sklep Syliusa (`SyliusShopBundle`) i panel admina (`SyliusAdminBundle`) są opcjonalne, więc plugin działa także
 w aplikacjach udostępniających tylko API.

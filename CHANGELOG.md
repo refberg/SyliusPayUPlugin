@@ -14,7 +14,7 @@
 - PayU orders `PENDING` and `WAITING_FOR_CONFIRMATION` move a `new` payment that still uses a PayU method to `processing` (1.0.0 left it `new`), so while PayU processes the payment Sylius blocks changing the payment method in the shop and through the API (`PATCH` of the payment), and the shop **Pay** leads to the thank-you page. The applier returns the new result `PaymentStateApplierInterface::RESULT_PROCESSING`.
 - A PayU order paid after the Sylius payment was already completed by another order, failed or cancelled is logged as `critical` instead of `error`. The warning names in the payment details are unchanged.
 - New optional last constructor arguments: `PaymentStateApplier` (`CredentialsResolverInterface`), `NotifyPaymentRequestHandler` and `StatusPaymentRequestHandler` (`PaymentRequestRepositoryInterface`).
-- Requires `sylius/sylius` 2.2.12+ or 2.3.2+: 2.2.9 limits the payment request actions available to shop API clients, and the security fixes of 2.2.12 reached the 2.3 line in 2.3.2.
+- Requires `sylius/sylius` 2.2.13+ or 2.3.3+, the first versions with the fixes for the Sylius security advisories GHSA-qf53-r587-295p, GHSA-vhpc-rcxq-vfgr and GHSA-fpgw-g9hj-m43q of 2026-11-18 (Composer refuses to install the vulnerable versions).
 
 ### Deprecated
 
