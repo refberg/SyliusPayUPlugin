@@ -117,6 +117,8 @@ Do ręcznych testów możesz użyć publicznego punktu płatności PLN w sandbox
 
 Jeśli żądania płatności są przetwarzane asynchronicznie (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` inny niż `sync://`),
 ustaw `framework.router.default_uri` na publiczny adres sklepu, żeby adres powiadomień był generowany poprawnie.
+Endpoint powiadomień odpowiada wtedy zawsze HTTP 200, więc opisane niżej odpowiedzi HTTP 5xx i ponowienia przez PayU
+nie działają; nieudane żądania płatności ponawia Messenger.
 
 Żądania do PayU (OAuth i REST API) mają limit bezczynności 15 sekund, ustawiony parametrem `refberg_payu.http_timeout`.
 Aby go zmienić, ustaw parametr w konfiguracji aplikacji:

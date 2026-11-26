@@ -170,7 +170,8 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
     {
         $synchronizer = self::createStub(PaymentSynchronizerInterface::class);
         $synchronizer->method('retrieveRefund')->willReturn(new RefundCreated('5000000001', 'r-1', 'PENDING', 1500, 'PLN'));
-        [$handler, $paymentRequest, $payment] = $this->handler($synchronizer, self::refundBody('ORDER1', '5000000001', $notifiedStatus, 1500));
+        $logger = new MemoryLogger();
+        [$handler, $paymentRequest, $payment] = $this->handler($synchronizer, self::refundBody('ORDER1', '5000000001', $notifiedStatus, 1500), logger: $logger);
         self::recordRefund($payment);
 
         try {
@@ -183,6 +184,17 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
         self::assertSame(PaymentRequestInterface::STATE_NEW, $paymentRequest->getState());
         self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
         self::assertSame('PENDING', PaymentDetails::of($payment)->refunds()['r-1']['status'] ?? null);
+        self::assertSame([[
+            'level' => 'warning',
+            'message' => 'PayU API does not show the notified final refund status yet; PayU will retry the notification.',
+            'context' => [
+                'payment_id' => 42,
+                'payu_order_id' => 'ORDER1',
+                'payu_refund_id' => '5000000001',
+                'notified_status' => $notifiedStatus,
+                'api_status' => 'PENDING',
+            ],
+        ]], $logger->records);
     }
 
     public function test_refund_notification_without_refund_id_fails_the_request(): void

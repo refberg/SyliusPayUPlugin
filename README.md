@@ -117,6 +117,8 @@ For manual tests you can use the public PLN sandbox POS published in the
 
 If payment requests are processed asynchronously (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` other than `sync://`),
 set `framework.router.default_uri` to the public shop URL, so the notification URL is generated correctly.
+The notification endpoint then always answers with HTTP 200, so the HTTP 5xx answers and PayU retries described below
+do not apply; Messenger retries failed payment requests instead.
 
 Requests to PayU (OAuth and REST API) use an idle timeout of 15 seconds, set by the `refberg_payu.http_timeout`
 parameter. To change it, set the parameter in the application configuration:
