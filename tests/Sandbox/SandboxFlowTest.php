@@ -51,7 +51,6 @@ final class SandboxFlowTest extends IntegrationTestCase
     {
         $payment = $this->createPlacedOrder();
         $redirect = $this->payInShop();
-        self::assertStringStartsWith('https://merch-prod.snd.payu.com/pay/', $redirect);
 
         $this->payAtPayU($redirect, 'positive');
         $payment = $this->waitForPaymentState($payment, 'completed');
@@ -108,6 +107,8 @@ final class SandboxFlowTest extends IntegrationTestCase
 
     private function payAtPayU(string $redirectUri, string $outcome): void
     {
+        self::assertStringStartsWith('https://merch-prod.snd.payu.com/pay/', $redirectUri);
+
         $process = new Process(['node', __DIR__ . '/pay.cjs', $redirectUri, $outcome]);
         $process->setTimeout(180);
         $process->run();
