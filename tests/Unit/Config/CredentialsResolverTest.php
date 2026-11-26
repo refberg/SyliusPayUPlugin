@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Refberg\SyliusPayUPlugin\Unit\Config;
 
+use LogicException;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolver;
 use Refberg\SyliusPayUPlugin\Config\Environment;
@@ -11,6 +12,7 @@ use Refberg\SyliusPayUPlugin\Config\InvalidConfigurationException;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfig;
 use Sylius\Component\Core\Model\PaymentMethod;
 use function print_r;
+use function serialize;
 use function str_replace;
 
 final class CredentialsResolverTest extends TestCase
@@ -82,6 +84,22 @@ final class CredentialsResolverTest extends TestCase
 
         self::assertStringNotContainsString('second', str_replace('secondKey', '', $dump));
         self::assertStringNotContainsString('secret', str_replace('clientSecret', '', $dump));
+        self::assertSame([
+            'posId' => '300046',
+            'secondKey' => '***',
+            'clientId' => 'client',
+            'clientSecret' => '***',
+            'environment' => 'sandbox',
+        ], $credentials->__debugInfo());
+    }
+
+    public function test_credentials_cannot_be_serialized(): void
+    {
+        $credentials = (new CredentialsResolver())->resolve(self::method('refberg_payu', self::config()));
+
+        $this->expectException(LogicException::class);
+
+        self::fail('Credentials must not be serializable: ' . serialize($credentials));
     }
 
     /**

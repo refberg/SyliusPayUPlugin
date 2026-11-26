@@ -287,6 +287,21 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
         self::assertSame([], PaymentDetails::of($payment)->refunds());
     }
 
+    public function test_duplicate_external_refund_notification_is_recorded_once(): void
+    {
+        $synchronizer = self::createStub(PaymentSynchronizerInterface::class);
+        $synchronizer->method('retrieveRefund')->willReturn(new RefundCreated('7000000001', null, RefundCreated::STATUS_FINALIZED, 1000, 'PLN'));
+        [$handler, , $payment, $method] = $this->handler($synchronizer, self::refundBody('ORDER1', '7000000001', 'FINALIZED', 1000));
+        [$duplicate] = $this->handler($synchronizer, self::refundBody('ORDER1', '7000000001', 'FINALIZED', 1000), method: $method, payment: $payment);
+
+        $handler(new NotifyPaymentRequest(self::HASH));
+        $duplicate(new NotifyPaymentRequest(self::HASH));
+
+        self::assertCount(1, PaymentDetails::of($payment)->refunds());
+        self::assertSame(1000, PaymentDetails::of($payment)->finalizedRefundAmount());
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
+    }
+
     public function test_external_refund_of_the_whole_payment_refunds_it(): void
     {
         $synchronizer = self::createStub(PaymentSynchronizerInterface::class);
