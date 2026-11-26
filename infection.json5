@@ -1,9 +1,10 @@
 {
     // Mutation testing covers the security-relevant logic that has unit tests:
-    // API client, signature, notification parsing, order validation and payment state rules.
+    // API client, signature, notification parsing, order validation, payment state rules and command handlers.
     "source": {
         "directories": [
             "src/Api",
+            "src/CommandHandler",
             "src/Config",
             "src/Notification",
             "src/Order",
@@ -15,6 +16,7 @@
         ]
     },
     // Log calls are diagnostics, not behaviour: mutating their context is not worth a test.
+    // The regex matches single lines, so mutants on the context lines of multi-line log calls survive; they are log context too.
     "mutators": {
         "@default": true,
         "global-ignoreSourceCodeByRegex": [
@@ -29,7 +31,7 @@
         "text": "var/infection.log",
         "github": true
     },
-    // Measured MSI is 81%; the thresholds keep it from dropping.
+    // Measured MSI is 94%; the thresholds keep it from dropping.
     "minMsi": 80,
     "minCoveredMsi": 80
 }

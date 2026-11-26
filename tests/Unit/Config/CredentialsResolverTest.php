@@ -45,6 +45,25 @@ final class CredentialsResolverTest extends TestCase
         (new CredentialsResolver())->resolve(self::method('refberg_payu', $config));
     }
 
+    public function test_whitespace_only_setting_is_missing(): void
+    {
+        $config = self::config();
+        $config['pos_id'] = '   ';
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('Payment method "PAYU" is missing the PayU "posId" setting.');
+
+        (new CredentialsResolver())->resolve(self::method('refberg_payu', $config));
+    }
+
+    public function test_factory_from_config_wins_over_factory_name(): void
+    {
+        $resolver = new CredentialsResolver();
+
+        self::assertTrue($resolver->supports(self::method('offline', ['factory' => 'refberg_payu'])));
+        self::assertFalse($resolver->supports(self::method('refberg_payu', ['factory' => 'offline'])));
+    }
+
     public function test_it_rejects_an_unknown_environment(): void
     {
         $config = self::config();

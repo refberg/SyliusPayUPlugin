@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUApiException;
+use Refberg\SyliusPayUPlugin\Api\Model\PayUOrder;
 use Refberg\SyliusPayUPlugin\Api\Model\RefundCreated;
 use Refberg\SyliusPayUPlugin\Command\NotifyPaymentRequest;
 use Refberg\SyliusPayUPlugin\CommandHandler\NotifyPaymentRequestHandler;
@@ -16,6 +17,7 @@ use Refberg\SyliusPayUPlugin\Config\CredentialsResolver;
 use Refberg\SyliusPayUPlugin\Notification\NotificationParser;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface;
+use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface;
 use Refberg\SyliusPayUPlugin\PayUGateway;
 use Refberg\SyliusPayUPlugin\Signature\SignatureVerifier;
@@ -27,11 +29,13 @@ use Sylius\Component\Payment\Model\PaymentInterface;
 use Sylius\Component\Payment\Model\PaymentRequest;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentTransitions;
+use Sylius\Component\Payment\Repository\PaymentRequestRepositoryInterface;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
 use Tests\Refberg\SyliusPayUPlugin\Support\MemoryLogger;
 use Tests\Refberg\SyliusPayUPlugin\Support\PaymentStateMachine;
 use function array_column;
 use function array_filter;
+use function array_keys;
 use function json_encode;
 use const JSON_THROW_ON_ERROR;
 
@@ -179,6 +183,7 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
             self::fail('Expected an exception.');
         } catch (PayUApiException $exception) {
             self::assertTrue($exception->isTransient());
+            self::assertSame(503, $exception->getHttpStatusCode());
         }
 
         self::assertSame(PaymentRequestInterface::STATE_NEW, $paymentRequest->getState());
@@ -195,6 +200,19 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
                 'api_status' => 'PENDING',
             ],
         ]], $logger->records);
+    }
+
+    public function test_sylius_refund_notification_is_not_also_recorded_as_external(): void
+    {
+        $synchronizer = self::createStub(PaymentSynchronizerInterface::class);
+        $synchronizer->method('retrieveRefund')->willReturn(new RefundCreated('5000000002', 'r-1', RefundCreated::STATUS_FINALIZED, 1500, 'PLN'));
+        [$handler, , $payment] = $this->handler($synchronizer, self::refundBody('ORDER1', '5000000002', 'FINALIZED', 1500));
+        self::recordRefund($payment);
+
+        $handler(new NotifyPaymentRequest(self::HASH));
+
+        self::assertSame(['r-1'], array_keys(PaymentDetails::of($payment)->refunds()));
+        self::assertSame(1500, PaymentDetails::of($payment)->finalizedRefundAmount());
     }
 
     public function test_refund_notification_without_refund_id_fails_the_request(): void
@@ -281,7 +299,64 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
         self::assertSame(1500, PaymentDetails::of($payment)->finalizedRefundAmount());
     }
 
+    #[TestWith([PaymentStateApplierInterface::RESULT_COMPLETED, true])]
+    #[TestWith([PaymentStateApplierInterface::RESULT_UNCHANGED, false])]
+    public function test_only_a_completed_order_restores_the_paid_method(string $result, bool $restored): void
+    {
+        $synchronizer = self::createStub(PaymentSynchronizerInterface::class);
+        $synchronizer->method('synchronize')->willReturn($result);
+        $locker = $this->createMock(PaymentLockerInterface::class);
+        $locker->expects(self::once())->method('lock');
+        [$handler, $paymentRequest, $payment, $method] = $this->handler($synchronizer, self::orderBody('ORDER1'), locker: $locker);
+        $otherMethod = new PaymentMethod();
+        $otherMethod->setCode('BANK_TRANSFER');
+        $payment->setMethod($otherMethod);
+
+        $handler(new NotifyPaymentRequest(self::HASH));
+
+        self::assertSame($restored ? $method : $otherMethod, $payment->getMethod());
+        self::assertSame([
+            'type' => 'order',
+            'order_id' => 'ORDER1',
+            'result' => $result,
+            'payment_state' => PaymentInterface::STATE_COMPLETED,
+        ], $paymentRequest->getResponseData());
+    }
+
+    public function test_only_capture_requests_of_the_notified_order_are_closed(): void
+    {
+        $synchronizer = self::createStub(PaymentSynchronizerInterface::class);
+        $synchronizer->method('synchronize')->willReturnCallback(static function (Payment $payment, string $orderId): string {
+            $details = PaymentDetails::of($payment);
+            $details->recordOrderStatus($orderId, PayUOrder::STATUS_COMPLETED);
+            $details->save();
+
+            return PaymentStateApplierInterface::RESULT_UNCHANGED;
+        });
+        $method = self::payuMethod();
+        $payment = self::paidPayment($method);
+        $details = PaymentDetails::of($payment);
+        $details->recordOrderStatus('ORDER2', PayUOrder::STATUS_CANCELED);
+        $details->save();
+        $capture = self::processingRequest($payment, $method, PaymentRequestInterface::ACTION_CAPTURE, 'ORDER1');
+        $otherOrderCapture = self::processingRequest($payment, $method, PaymentRequestInterface::ACTION_CAPTURE, 'ORDER2');
+        $captureWithoutOrder = self::processingRequest($payment, $method, PaymentRequestInterface::ACTION_CAPTURE, null);
+        $refund = self::processingRequest($payment, $method, PaymentRequestInterface::ACTION_REFUND, 'ORDER1');
+        $repository = self::createStub(PaymentRequestRepositoryInterface::class);
+        $repository->method('findByPaymentIdAndStates')->willReturn([$otherOrderCapture, $captureWithoutOrder, $refund, $capture]);
+        [$handler] = $this->handler($synchronizer, self::orderBody('ORDER1'), method: $method, payment: $payment, paymentRequestRepository: $repository);
+
+        $handler(new NotifyPaymentRequest(self::HASH));
+
+        self::assertSame(PaymentRequestInterface::STATE_COMPLETED, $capture->getState());
+        self::assertSame(PaymentRequestInterface::STATE_PROCESSING, $otherOrderCapture->getState());
+        self::assertSame(PaymentRequestInterface::STATE_PROCESSING, $captureWithoutOrder->getState());
+        self::assertSame(PaymentRequestInterface::STATE_PROCESSING, $refund->getState());
+    }
+
     /**
+     * @param PaymentRequestRepositoryInterface<PaymentRequestInterface>|null $paymentRequestRepository
+     *
      * @return array{NotifyPaymentRequestHandler, PaymentRequestInterface, Payment, PaymentMethod}
      */
     private function handler(
@@ -293,6 +368,7 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
         ?PaymentLockerInterface $locker = null,
         PaymentStateMachine $stateMachine = new PaymentStateMachine(),
         LoggerInterface $logger = new NullLogger(),
+        ?PaymentRequestRepositoryInterface $paymentRequestRepository = null,
     ): array {
         $method ??= self::payuMethod();
         $payment ??= self::paidPayment($method);
@@ -314,6 +390,7 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
             $locker ?? self::createStub(PaymentLockerInterface::class),
             $stateMachine,
             $logger,
+            $paymentRequestRepository,
         );
 
         return [$handler, $paymentRequest, $payment, $method];
@@ -363,6 +440,18 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
         $details = PaymentDetails::of($payment);
         $details->recordRefund('r-1', '5000000001', 'PENDING', 1500, 'PLN');
         $details->save();
+    }
+
+    private static function processingRequest(Payment $payment, PaymentMethod $method, string $action, ?string $orderId): PaymentRequestInterface
+    {
+        $request = new PaymentRequest($payment, $method);
+        $request->setAction($action);
+        $request->setState(PaymentRequestInterface::STATE_PROCESSING);
+        if (null !== $orderId) {
+            $request->setResponseData(['order_id' => $orderId]);
+        }
+
+        return $request;
     }
 
     private static function orderBody(string $orderId): string
