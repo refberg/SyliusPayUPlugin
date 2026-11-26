@@ -99,6 +99,11 @@ final readonly class NotifyPaymentRequestHandler
                 return;
             }
 
+            // The body only decides to try later: PayU may notify before its API shows the final status, and 5xx makes PayU retry.
+            if (RefundCreated::isFinalStatus($notification->refundStatus) && !RefundCreated::isFinalStatus($refund->status)) {
+                throw new PayUApiException('PayU API does not show the notified final refund status yet.', 503);
+            }
+
             $this->handleRefund($notification->orderId, $refund, $details, $payment);
             $this->completeRequest($paymentRequest, ['type' => Notification::TYPE_REFUND, 'refund_status' => $refund->status]);
 

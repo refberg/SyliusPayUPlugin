@@ -153,15 +153,50 @@ final class NotifyPaymentRequestHandlerTest extends TestCase
         $synchronizer = $this->createMock(PaymentSynchronizerInterface::class);
         $synchronizer->expects(self::once())->method('retrieveRefund')
             ->with(self::isInstanceOf(PaymentInterface::class), 'ORDER1', '5000000001', self::anything())
-            ->willReturn(new RefundCreated('5000000001', 'r-1', 'PENDING', 1500, 'PLN'));
-        [$handler, $paymentRequest, $payment] = $this->handler($synchronizer, self::refundBody('ORDER1', '5000000001', 'FINALIZED', 1500));
+            ->willReturn(new RefundCreated('5000000001', 'r-1', RefundCreated::STATUS_FINALIZED, 1500, 'PLN'));
+        [$handler, $paymentRequest, $payment] = $this->handler($synchronizer, self::refundBody('ORDER1', '5000000001', 'PENDING', 1));
         self::recordRefund($payment);
 
         $handler(new NotifyPaymentRequest(self::HASH));
 
-        self::assertSame(['type' => 'refund', 'refund_status' => 'PENDING'], $paymentRequest->getResponseData());
+        self::assertSame(['type' => 'refund', 'refund_status' => 'FINALIZED'], $paymentRequest->getResponseData());
+        self::assertSame(PaymentInterface::STATE_REFUNDED, $payment->getState());
+        self::assertSame('FINALIZED', PaymentDetails::of($payment)->refunds()['r-1']['status'] ?? null);
+    }
+
+    #[TestWith([RefundCreated::STATUS_FINALIZED])]
+    #[TestWith([RefundCreated::STATUS_CANCELED])]
+    public function test_final_status_not_yet_shown_by_the_api_is_retried_without_changing_the_state(string $notifiedStatus): void
+    {
+        $synchronizer = self::createStub(PaymentSynchronizerInterface::class);
+        $synchronizer->method('retrieveRefund')->willReturn(new RefundCreated('5000000001', 'r-1', 'PENDING', 1500, 'PLN'));
+        [$handler, $paymentRequest, $payment] = $this->handler($synchronizer, self::refundBody('ORDER1', '5000000001', $notifiedStatus, 1500));
+        self::recordRefund($payment);
+
+        try {
+            $handler(new NotifyPaymentRequest(self::HASH));
+            self::fail('Expected an exception.');
+        } catch (PayUApiException $exception) {
+            self::assertTrue($exception->isTransient());
+        }
+
+        self::assertSame(PaymentRequestInterface::STATE_NEW, $paymentRequest->getState());
         self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
         self::assertSame('PENDING', PaymentDetails::of($payment)->refunds()['r-1']['status'] ?? null);
+    }
+
+    public function test_refund_notification_without_refund_id_fails_the_request(): void
+    {
+        $synchronizer = $this->createMock(PaymentSynchronizerInterface::class);
+        $synchronizer->expects(self::never())->method('retrieveRefund');
+        $synchronizer->expects(self::never())->method('synchronize');
+        $body = json_encode(['orderId' => 'ORDER1', 'refund' => ['status' => 'FINALIZED', 'amount' => '1500', 'currencyCode' => 'PLN']], JSON_THROW_ON_ERROR);
+        [$handler, $paymentRequest, $payment] = $this->handler($synchronizer, $body);
+
+        $handler(new NotifyPaymentRequest(self::HASH));
+
+        self::assertSame(PaymentRequestInterface::STATE_FAILED, $paymentRequest->getState());
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
     }
 
     public function test_canceled_refund_is_logged_as_error(): void

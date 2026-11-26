@@ -304,7 +304,8 @@ Końcowy status zwrotu jest zapisywany w szczegółach płatności.
 Po weryfikacji podpisu powiadomienia o zwrocie plugin odczytuje zwrot z API PayU
 (`GET /api/v2_1/orders/{orderId}/refunds`) i stamtąd bierze jego status, kwotę i walutę, a nie z treści powiadomienia.
 Jeśli API nie zwraca tego zwrotu dla zamówienia w walucie płatności, żądanie powiadomienia zostaje oznaczone
-jako nieudane i nic się nie zmienia.
+jako nieudane i nic się nie zmienia. Gdy powiadomienie podaje końcowy status zwrotu, którego API jeszcze nie pokazuje,
+endpoint odpowiada HTTP 5xx i nic nie zmienia, więc PayU ponowi powiadomienie później.
 
 Zwroty zlecone wcześniej w panelu PayU (poza anulowanymi) są odejmowane od kwoty zwrotu. Gdy pokrywają całą
 płatność, plugin nie wywołuje PayU i oznacza żądanie zwrotu jako zakończone.

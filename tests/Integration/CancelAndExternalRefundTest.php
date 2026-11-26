@@ -11,7 +11,6 @@ use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
-use function array_values;
 use function count;
 
 final class CancelAndExternalRefundTest extends IntegrationTestCase
@@ -155,7 +154,7 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
         self::assertSame(0, $this->details($payment)->finalizedRefundAmount());
     }
 
-    public function test_refund_notification_claiming_finalized_while_payu_reports_pending_does_not_refund_the_payment(): void
+    public function test_finalized_refund_notification_ahead_of_the_payu_api_is_retried_until_the_api_shows_it(): void
     {
         $payment = $this->paidPayment();
         $orderId = $this->payu->lastOrderId();
@@ -164,11 +163,17 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
         // Correctly signed, claims FINALIZED, but the PayU API still lists the refund as PENDING.
         $body = $this->payu->refundNotificationBody($orderId, $refundId, 'FINALIZED');
         $this->payu->setRefundStatus($refundId, 'PENDING');
-        self::assertSame(Response::HTTP_OK, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
+        $this->client->catchExceptions(true);
+        self::assertGreaterThanOrEqual(500, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
 
         self::assertSame('completed', $this->reloadPayment($payment)->getState());
-        self::assertSame(0, $this->details($payment)->finalizedRefundAmount());
-        self::assertSame('PENDING', array_values($this->details($payment)->refunds())[0]['status'] ?? null);
+        self::assertSame([], $this->details($payment)->refunds());
+
+        $this->payu->setRefundStatus($refundId, 'FINALIZED');
+        self::assertSame(Response::HTTP_OK, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
+
+        self::assertSame('refunded', $this->reloadPayment($payment)->getState());
+        self::assertSame(1500, $this->details($payment)->finalizedRefundAmount());
     }
 
     private function paidPayment(): PaymentInterface

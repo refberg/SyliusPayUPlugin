@@ -32,7 +32,7 @@
 - Capture checks the payment state after acquiring the payment lock, so a payment completed in the meantime gets no new PayU order.
 - A notification is answered with HTTP 5xx, so PayU retries it, when the PayU API rejects the plugin credentials (HTTP 401/403).
 - A refund made in the PayU panel that is finalized after a PENDING notification marks the payment as refunded once finalized refunds cover it.
-- Refund notifications no longer trust the notification body: after the signature check, the refund status, amount and currency are read from the PayU API (`GET /api/v2_1/orders/{orderId}/refunds`). A refund that the API does not list for the order in the payment currency fails the notification payment request without changing the payment, and a refund made in the PayU panel that is larger than the payment is ignored.
+- Refund notifications no longer trust the notification body: after the signature check, the refund status, amount and currency are read from the PayU API (`GET /api/v2_1/orders/{orderId}/refunds`). A refund that the API does not list for the order in the payment currency fails the notification payment request without changing the payment, and so does a refund notification without `refundId` (1.0.0 completed it without changes). When the notification reports a final refund status that the API does not show yet, the endpoint answers with HTTP 5xx, so PayU retries it, and nothing changes. A refund made in the PayU panel that is larger than the payment is ignored.
 - The cancel payment request completes only when PayU reports the order as `CANCELED` after the cancel call; PayU answers the cancel of a paid order with success, which the plugin used to record as canceled.
 
 ### Removed

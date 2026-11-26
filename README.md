@@ -303,7 +303,8 @@ refund status is stored in the payment details.
 After verifying the signature of a refund notification, the plugin reads the refund from the PayU API
 (`GET /api/v2_1/orders/{orderId}/refunds`) and takes its status, amount and currency from there, not from the
 notification body. A refund that the API does not list for the order in the payment currency fails the notification
-payment request and changes nothing.
+payment request and changes nothing. When the notification reports a final refund status that the API does not show yet,
+the endpoint answers with HTTP 5xx and changes nothing, so PayU retries the notification later.
 
 Refunds already made in the PayU panel (except canceled ones) are subtracted from the requested amount. When they
 cover the whole payment, the plugin does not call PayU and completes the refund payment request.
