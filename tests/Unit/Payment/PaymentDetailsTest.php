@@ -6,6 +6,7 @@ namespace Tests\Refberg\SyliusPayUPlugin\Unit\Payment;
 
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
+use Refberg\SyliusPayUPlugin\PayUGateway;
 use Sylius\Component\Core\Model\Payment;
 
 final class PaymentDetailsTest extends TestCase
@@ -135,5 +136,45 @@ final class PaymentDetailsTest extends TestCase
         $details->updateRefundStatus('501', null, 'CANCELED');
 
         self::assertFalse($details->hasActiveRefund());
+    }
+
+    public function test_numeric_order_id_stays_a_string(): void
+    {
+        $details = PaymentDetails::of(new Payment());
+        $details->addOrder('123', 'ext', 1500, 'PLN');
+
+        self::assertSame(['123'], $details->getOpenOrderIds());
+    }
+
+    public function test_refund_status_found_by_numeric_ext_refund_id(): void
+    {
+        $details = PaymentDetails::of(new Payment());
+        $details->recordRefund('42', '501', 'PENDING', 1000, 'PLN');
+
+        self::assertTrue($details->updateRefundStatus('unknown', '42', 'FINALIZED'));
+        self::assertSame(1000, $details->finalizedRefundAmount());
+    }
+
+    public function test_external_refund_is_keyed_with_payu_prefix(): void
+    {
+        $details = PaymentDetails::of(new Payment());
+        $details->recordRefund('700', '501', 'PENDING', 1000, 'PLN');
+        $details->recordExternalRefund('700', 'FINALIZED', 300, 'PLN');
+
+        $refunds = $details->refunds();
+        self::assertCount(2, $refunds);
+        self::assertSame('501', $refunds['700']['refund_id'] ?? null);
+        self::assertSame('700', $refunds['payu-700']['refund_id'] ?? null);
+    }
+
+    public function test_refund_without_amount_adds_nothing(): void
+    {
+        $payment = new Payment();
+        $payment->setDetails([PayUGateway::DETAILS_KEY => ['refunds' => ['r-1' => ['refund_id' => '501', 'status' => 'FINALIZED']]]]);
+
+        $details = PaymentDetails::of($payment);
+
+        self::assertSame(0, $details->finalizedRefundAmount());
+        self::assertSame(0, $details->activeRefundAmount());
     }
 }

@@ -6,6 +6,7 @@ namespace Tests\Refberg\SyliusPayUPlugin\Unit\CommandHandler;
 
 use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
+use Refberg\SyliusPayUPlugin\Api\Exception\PayUApiException;
 use Refberg\SyliusPayUPlugin\Command\StatusPaymentRequest;
 use Refberg\SyliusPayUPlugin\CommandHandler\StatusPaymentRequestHandler;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolver;
@@ -23,6 +24,7 @@ use Sylius\Component\Payment\Model\PaymentRequest;
 use Sylius\Component\Payment\Model\PaymentRequestInterface;
 use Sylius\Component\Payment\Repository\PaymentRequestRepositoryInterface;
 use Tests\Refberg\SyliusPayUPlugin\Support\FakePayU;
+use Tests\Refberg\SyliusPayUPlugin\Support\MemoryLogger;
 use Tests\Refberg\SyliusPayUPlugin\Support\PaymentStateMachine;
 use function array_filter;
 use function array_values;
@@ -72,14 +74,47 @@ final class StatusPaymentRequestHandlerTest extends TestCase
         self::assertSame(PaymentRequestInterface::STATE_COMPLETED, $statusRequest->getState());
     }
 
+    public function test_api_error_fails_the_request_and_keeps_the_payment(): void
+    {
+        $method = self::payuMethod();
+        $payment = self::payment($method, ['ORDER1']);
+        $capture = self::request($payment, $method, PaymentRequestInterface::ACTION_CAPTURE, PaymentRequestInterface::STATE_PROCESSING, 'ORDER1');
+        $statusRequest = self::request($payment, $method, PaymentRequestInterface::ACTION_STATUS, PaymentRequestInterface::STATE_NEW, null);
+        $synchronizer = self::createStub(PaymentSynchronizerInterface::class);
+        $synchronizer->method('synchronize')->willThrowException(new PayUApiException('Retrieving PayU order failed (HTTP 503).', 503));
+        $logger = new MemoryLogger();
+
+        $this->invoke($statusRequest, [$capture, $statusRequest], $synchronizer, $logger);
+
+        self::assertSame(PaymentRequestInterface::STATE_FAILED, $statusRequest->getState());
+        self::assertSame(['error' => 'Retrieving PayU order failed (HTTP 503).'], $statusRequest->getResponseData());
+        self::assertSame(PaymentInterface::STATE_NEW, $payment->getState());
+        self::assertSame(PaymentRequestInterface::STATE_PROCESSING, $capture->getState());
+        self::assertSame('warning', $logger->records[0]['level'] ?? null);
+        self::assertSame(['payment_id' => 42, 'reason' => 'Retrieving PayU order failed (HTTP 503).'], $logger->records[0]['context']);
+    }
+
+    public function test_invalid_configuration_fails_the_request(): void
+    {
+        $method = self::payuMethod();
+        $method->getGatewayConfig()?->setConfig(['environment' => 'sandbox']);
+        $payment = self::payment($method, ['ORDER1']);
+        $statusRequest = self::request($payment, $method, PaymentRequestInterface::ACTION_STATUS, PaymentRequestInterface::STATE_NEW, null);
+        $synchronizer = $this->createMock(PaymentSynchronizerInterface::class);
+        $synchronizer->expects(self::never())->method('synchronize');
+
+        $this->invoke($statusRequest, [$statusRequest], $synchronizer);
+
+        self::assertSame(PaymentRequestInterface::STATE_FAILED, $statusRequest->getState());
+        self::assertSame(['error' => 'Payment method "PAYU" is missing the PayU "posId" setting.'], $statusRequest->getResponseData());
+        self::assertSame(PaymentInterface::STATE_NEW, $payment->getState());
+    }
+
     /**
      * @param list<PaymentRequestInterface> $requests
      */
     private function handle(PaymentRequestInterface $statusRequest, array $requests, string $payuStatus): void
     {
-        $paymentRequestProvider = self::createStub(PaymentRequestProviderInterface::class);
-        $paymentRequestProvider->method('provide')->willReturn($statusRequest);
-
         $synchronizer = self::createStub(PaymentSynchronizerInterface::class);
         $synchronizer->method('synchronize')->willReturnCallback(static function (PaymentInterface $synchronized, string $orderId) use ($payuStatus): string {
             $details = PaymentDetails::of($synchronized);
@@ -88,6 +123,17 @@ final class StatusPaymentRequestHandlerTest extends TestCase
 
             return PaymentStateApplierInterface::RESULT_UNCHANGED;
         });
+
+        $this->invoke($statusRequest, $requests, $synchronizer);
+    }
+
+    /**
+     * @param list<PaymentRequestInterface> $requests
+     */
+    private function invoke(PaymentRequestInterface $statusRequest, array $requests, PaymentSynchronizerInterface $synchronizer, MemoryLogger $logger = new MemoryLogger()): void
+    {
+        $paymentRequestProvider = self::createStub(PaymentRequestProviderInterface::class);
+        $paymentRequestProvider->method('provide')->willReturn($statusRequest);
 
         $paymentRequestRepository = self::createStub(PaymentRequestRepositoryInterface::class);
         $paymentRequestRepository->method('findByPaymentIdAndStates')->willReturnCallback(
@@ -100,7 +146,8 @@ final class StatusPaymentRequestHandlerTest extends TestCase
             $synchronizer,
             self::createStub(PaymentLockerInterface::class),
             new PaymentStateMachine(),
-            paymentRequestRepository: $paymentRequestRepository,
+            $logger,
+            $paymentRequestRepository,
         );
 
         $handler(new StatusPaymentRequest('3f2504e0-4f89-11d3-9a0c-0305e82c3301'));

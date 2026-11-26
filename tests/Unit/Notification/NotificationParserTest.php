@@ -78,6 +78,26 @@ final class NotificationParserTest extends TestCase
         self::assertNull($this->parser->parseStoredPayload(['http_request' => ['content' => $body, 'headers' => []]], self::credentials()));
     }
 
+    public function test_stored_payload_with_non_string_content_or_non_array_headers_is_rejected(): void
+    {
+        $body = '{"order":{"orderId":"ORDER1","extOrderId":"x","status":"PENDING"}}';
+        $headers = ['openpayu-signature' => [FakePayU::signatureHeader($body)]];
+
+        self::assertNull($this->parser->parseStoredPayload(['http_request' => ['content' => ['not a string'], 'headers' => $headers]], self::credentials()));
+        self::assertNull($this->parser->parseStoredPayload(['http_request' => ['content' => $body, 'headers' => 'openpayu-signature']], self::credentials()));
+    }
+
+    public function test_refund_amount_is_parsed(): void
+    {
+        $withAmount = '{"orderId":"ORDER1","refund":{"refundId":"912","amount":"1500","currencyCode":"PLN","status":"FINALIZED"}}';
+        $withoutAmount = '{"orderId":"ORDER1","refund":{"refundId":"912","currencyCode":"PLN","status":"FINALIZED"}}';
+
+        self::assertSame(1500, $this->parser->parse($withAmount, ['openpayu-signature' => [FakePayU::signatureHeader($withAmount)]], self::credentials())?->refundAmount);
+        $notification = $this->parser->parse($withoutAmount, ['openpayu-signature' => [FakePayU::signatureHeader($withoutAmount)]], self::credentials());
+        self::assertNotNull($notification);
+        self::assertNull($notification->refundAmount);
+    }
+
     private static function credentials(): PayUCredentials
     {
         return new PayUCredentials(FakePayU::POS_ID, FakePayU::SECOND_KEY, FakePayU::CLIENT_ID, FakePayU::CLIENT_SECRET, Environment::Sandbox);
