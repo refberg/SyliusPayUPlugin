@@ -43,7 +43,7 @@ final class PayUClientTest extends TestCase
 
     public function test_it_creates_an_order_without_following_the_redirect(): void
     {
-        $created = $this->client()->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $created = $this->client()->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
 
         self::assertSame($this->payu->lastOrderId(), $created->orderId);
         self::assertStringStartsWith('https://merch-prod.snd.payu.com/pay/', $created->redirectUri);
@@ -54,8 +54,8 @@ final class PayUClientTest extends TestCase
     public function test_it_sends_the_bearer_token_and_caches_it(): void
     {
         $client = $this->client();
-        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
-        $client->retrieveOrder(self::credentials(), $this->payu->lastOrderId());
+        $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
+        $client->retrieveOrder(FakePayU::credentials(), $this->payu->lastOrderId());
 
         self::assertCount(1, $this->payu->requests('POST', '#oauth/authorize#'));
         $order = $this->payu->requests('GET')[0];
@@ -64,12 +64,12 @@ final class PayUClientTest extends TestCase
 
     public function test_it_refreshes_an_expired_token_once(): void
     {
-        $this->client()->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $this->client()->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
 
         // A different FakePayU instance does not know the cached token, like PayU after token expiry.
         $otherPayU = new FakePayU();
         $client = $this->client($otherPayU);
-        $client->createOrder(self::credentials(), self::orderBody('000001-1-bbbbbbbbbbbb'));
+        $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-bbbbbbbbbbbb'));
 
         self::assertCount(1, $otherPayU->requests('POST', '#oauth/authorize#'));
         self::assertCount(2, $otherPayU->requests('POST', '#^/api/v2_1/orders$#'));
@@ -80,7 +80,7 @@ final class PayUClientTest extends TestCase
         $credentials = new PayUCredentials('300046', FakePayU::SECOND_KEY, FakePayU::CLIENT_ID, 'wrong-secret-value', Environment::Sandbox);
 
         try {
-            $this->client()->createOrder($credentials, self::orderBody('000001-1-aaaaaaaaaaaa'));
+            $this->client()->createOrder($credentials, FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
             self::fail('Expected an authentication exception.');
         } catch (PayUAuthenticationException $exception) {
             self::assertStringNotContainsString('wrong-secret-value', $exception->getMessage());
@@ -92,7 +92,7 @@ final class PayUClientTest extends TestCase
         $this->payu->failNextRequest(400, 'ERROR_VALUE_INVALID');
 
         try {
-            $this->client()->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+            $this->client()->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
             self::fail('Expected an API exception.');
         } catch (PayUApiException $exception) {
             self::assertSame(400, $exception->getHttpStatusCode());
@@ -110,7 +110,7 @@ final class PayUClientTest extends TestCase
         $this->payu->failNextRequest($httpStatus);
 
         try {
-            $this->client()->retrieveOrder(self::credentials(), 'X');
+            $this->client()->retrieveOrder(FakePayU::credentials(), 'X');
             self::fail('Expected an API exception.');
         } catch (PayUApiException $exception) {
             self::assertTrue($exception->isTransient());
@@ -124,27 +124,27 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('OPENPAYU_BUSINESS_ERROR/TRANS_NOT_ENDED');
 
-        $this->client()->createRefund(self::credentials(), 'X', ['description' => 'Refund']);
+        $this->client()->createRefund(FakePayU::credentials(), 'X', ['description' => 'Refund']);
     }
 
     public function test_it_rejects_a_duplicated_ext_order_id(): void
     {
         $client = $this->client();
-        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
 
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('ERROR_ORDER_NOT_UNIQUE');
 
-        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
     }
 
     public function test_it_retrieves_an_order(): void
     {
         $client = $this->client();
-        $created = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $created = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
         $this->payu->setOrderStatus($created->orderId, 'COMPLETED');
 
-        $order = $client->retrieveOrder(self::credentials(), $created->orderId);
+        $order = $client->retrieveOrder(FakePayU::credentials(), $created->orderId);
 
         self::assertSame('COMPLETED', $order->status);
         self::assertSame(1500, $order->totalAmount);
@@ -156,10 +156,10 @@ final class PayUClientTest extends TestCase
     public function test_it_creates_a_refund(): void
     {
         $client = $this->client();
-        $created = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $created = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
         $this->payu->setOrderStatus($created->orderId, 'COMPLETED');
 
-        $refund = $client->createRefund(self::credentials(), $created->orderId, ['description' => 'Refund', 'amount' => 1500, 'currencyCode' => 'PLN', 'extRefundId' => 'r-1']);
+        $refund = $client->createRefund(FakePayU::credentials(), $created->orderId, ['description' => 'Refund', 'amount' => 1500, 'currencyCode' => 'PLN', 'extRefundId' => 'r-1']);
 
         self::assertSame('PENDING', $refund->status);
         self::assertSame(1500, $refund->amount);
@@ -169,12 +169,12 @@ final class PayUClientTest extends TestCase
     public function test_cancel_succeeds_for_an_open_and_a_completed_order_but_cancels_only_the_open_one(): void
     {
         $client = $this->client();
-        $open = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
-        $paid = $client->createOrder(self::credentials(), self::orderBody('000001-1-bbbbbbbbbbbb'));
+        $open = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
+        $paid = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-bbbbbbbbbbbb'));
         $this->payu->setOrderStatus($paid->orderId, 'COMPLETED');
 
-        $client->cancelOrder(self::credentials(), $open->orderId);
-        $client->cancelOrder(self::credentials(), $paid->orderId);
+        $client->cancelOrder(FakePayU::credentials(), $open->orderId);
+        $client->cancelOrder(FakePayU::credentials(), $paid->orderId);
 
         self::assertSame('CANCELED', $this->payu->order($open->orderId)['status']);
         self::assertSame('COMPLETED', $this->payu->order($paid->orderId)['status']);
@@ -184,18 +184,18 @@ final class PayUClientTest extends TestCase
     {
         $this->expectException(PayUApiException::class);
 
-        $this->client()->cancelOrder(self::credentials(), 'UNKNOWN');
+        $this->client()->cancelOrder(FakePayU::credentials(), 'UNKNOWN');
     }
 
     public function test_cancel_answered_with_http_200_without_success_status_fails(): void
     {
         $client = $this->client();
-        $created = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $created = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
         $this->payu->failNextRequest(200, 'ERROR_VALUE_INVALID');
 
         $this->expectException(PayUApiException::class);
 
-        $client->cancelOrder(self::credentials(), $created->orderId);
+        $client->cancelOrder(FakePayU::credentials(), $created->orderId);
     }
 
     public function test_transport_errors_are_wrapped(): void
@@ -205,7 +205,7 @@ final class PayUClientTest extends TestCase
 
         $this->expectException(PayUTransportException::class);
 
-        $client->retrieveOrder(self::credentials(), 'X');
+        $client->retrieveOrder(FakePayU::credentials(), 'X');
     }
 
     public function test_it_refuses_to_call_any_host_but_the_sandbox(): void
@@ -221,11 +221,11 @@ final class PayUClientTest extends TestCase
     public function test_logs_never_contain_secrets_or_tokens(): void
     {
         $client = $this->client();
-        $created = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $created = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
         $this->payu->failNextRequest(500);
 
         try {
-            $client->retrieveOrder(self::credentials(), $created->orderId);
+            $client->retrieveOrder(FakePayU::credentials(), $created->orderId);
         } catch (PayUApiException) {
         }
 
@@ -242,7 +242,7 @@ final class PayUClientTest extends TestCase
     {
         $client = $this->clientAnswering(self::response($httpStatus, ['status' => ['statusCode' => 'SUCCESS'], 'orderId' => 'ORDER1', 'redirectUri' => 'https://merch-prod.snd.payu.com/pay/?orderId=ORDER1']));
 
-        self::assertSame('ORDER1', $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'))->orderId);
+        self::assertSame('ORDER1', $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'))->orderId);
     }
 
     public function test_order_creation_without_success_status_fails(): void
@@ -252,7 +252,7 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('Creating PayU order failed (HTTP 302, ERROR_VALUE_INVALID).');
 
-        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
     }
 
     /**
@@ -275,19 +275,19 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('PayU order response is missing orderId or redirectUri.');
 
-        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
     }
 
     public function test_retrieve_order_error_reports_the_payu_status(): void
     {
         $client = $this->client();
-        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
         $this->payu->failNextRequest(200, 'DATA_NOT_FOUND');
 
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('Retrieving PayU order failed (HTTP 200, DATA_NOT_FOUND).');
 
-        $client->retrieveOrder(self::credentials(), $this->payu->lastOrderId());
+        $client->retrieveOrder(FakePayU::credentials(), $this->payu->lastOrderId());
     }
 
     public function test_response_with_only_another_order_fails(): void
@@ -297,7 +297,7 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('PayU order response does not contain the requested order.');
 
-        $client->retrieveOrder(self::credentials(), 'ORDER1');
+        $client->retrieveOrder(FakePayU::credentials(), 'ORDER1');
     }
 
     /**
@@ -321,19 +321,19 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('PayU order response is incomplete.');
 
-        $client->retrieveOrder(self::credentials(), 'ORDER1');
+        $client->retrieveOrder(FakePayU::credentials(), 'ORDER1');
     }
 
     public function test_refund_without_success_status_fails(): void
     {
         $client = $this->client();
-        $created = $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $created = $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
         $this->payu->failNextRequest(200, 'ERROR_VALUE_INVALID');
 
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('Creating PayU refund failed (HTTP 200, ERROR_VALUE_INVALID).');
 
-        $client->createRefund(self::credentials(), $created->orderId, ['description' => 'Refund']);
+        $client->createRefund(FakePayU::credentials(), $created->orderId, ['description' => 'Refund']);
     }
 
     /**
@@ -359,7 +359,7 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('PayU refund response is incomplete.');
 
-        $client->createRefund(self::credentials(), 'ORDER1', ['description' => 'Refund']);
+        $client->createRefund(FakePayU::credentials(), 'ORDER1', ['description' => 'Refund']);
     }
 
     public function test_requests_disable_redirects_and_set_timeout_and_accept(): void
@@ -375,7 +375,7 @@ final class PayUClientTest extends TestCase
         });
         $client = new PayUClient($httpClient, new AccessTokenProvider($httpClient, $this->cache), $this->logger, 7.5);
 
-        $client->createOrder(self::credentials(), self::orderBody('000001-1-aaaaaaaaaaaa'));
+        $client->createOrder(FakePayU::credentials(), FakePayU::orderBody('000001-1-aaaaaaaaaaaa'));
 
         self::assertCount(1, $apiOptions);
         self::assertSame(0, $apiOptions[0]['max_redirects'] ?? null);
@@ -399,7 +399,7 @@ final class PayUClientTest extends TestCase
         $client = new PayUClient($httpClient, new AccessTokenProvider($httpClient, $this->cache));
 
         try {
-            $client->retrieveOrder(self::credentials(), 'ORDER1');
+            $client->retrieveOrder(FakePayU::credentials(), 'ORDER1');
             self::fail('Expected an API exception.');
         } catch (PayUApiException $exception) {
             self::assertSame(401, $exception->getHttpStatusCode());
@@ -415,7 +415,7 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUApiException::class);
         $this->expectExceptionMessage('Retrieving PayU order failed (HTTP 400, ERROR_VALUE_INVALID: a' . str_repeat('ż', 199) . ').');
 
-        $client->retrieveOrder(self::credentials(), 'ORDER1');
+        $client->retrieveOrder(FakePayU::credentials(), 'ORDER1');
     }
 
     public function test_transport_error_after_authorization_is_wrapped(): void
@@ -425,7 +425,7 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUTransportException::class);
         $this->expectExceptionMessage('Could not reach PayU API.');
 
-        $client->retrieveOrder(self::credentials(), 'ORDER1');
+        $client->retrieveOrder(FakePayU::credentials(), 'ORDER1');
     }
 
     public function test_unreadable_body_is_mapped_to_an_api_error(): void
@@ -433,7 +433,7 @@ final class PayUClientTest extends TestCase
         $client = $this->clientAnswering(new MockResponse('<html>Bad Gateway</html>', ['http_code' => 502]));
 
         try {
-            $client->retrieveOrder(self::credentials(), 'ORDER1');
+            $client->retrieveOrder(FakePayU::credentials(), 'ORDER1');
             self::fail('Expected an API exception.');
         } catch (PayUApiException $exception) {
             self::assertSame('Retrieving PayU order failed (HTTP 502).', $exception->getMessage());
@@ -458,7 +458,7 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUAuthenticationException::class);
         $this->expectExceptionMessage('PayU OAuth response did not contain an access token.');
 
-        (new AccessTokenProvider($httpClient, $this->cache))->getToken(self::credentials());
+        (new AccessTokenProvider($httpClient, $this->cache))->getToken(FakePayU::credentials());
     }
 
     public function test_unreadable_oauth_response_is_an_authentication_error(): void
@@ -468,7 +468,7 @@ final class PayUClientTest extends TestCase
         $this->expectException(PayUAuthenticationException::class);
         $this->expectExceptionMessage('PayU OAuth endpoint returned an unreadable response.');
 
-        (new AccessTokenProvider($httpClient, $this->cache))->getToken(self::credentials());
+        (new AccessTokenProvider($httpClient, $this->cache))->getToken(FakePayU::credentials());
     }
 
     public function test_tokens_are_cached_per_environment_and_client(): void
@@ -478,7 +478,7 @@ final class PayUClientTest extends TestCase
             return self::response(200, ['access_token' => 'token-' . ++$authorizations, 'expires_in' => 3600]);
         });
         $provider = new AccessTokenProvider($httpClient, $this->cache);
-        $sandbox = self::credentials();
+        $sandbox = FakePayU::credentials();
 
         self::assertSame('token-1', $provider->getToken($sandbox));
         self::assertSame('token-2', $provider->getToken(new PayUCredentials(FakePayU::POS_ID, FakePayU::SECOND_KEY, FakePayU::CLIENT_ID, FakePayU::CLIENT_SECRET, Environment::Production)));
@@ -520,28 +520,5 @@ final class PayUClientTest extends TestCase
     private static function orderItem(array $override = []): array
     {
         return [...['orderId' => 'ORDER1', 'extOrderId' => '000001-1-aaaaaaaaaaaa', 'status' => 'COMPLETED', 'totalAmount' => '1500', 'currencyCode' => 'PLN'], ...$override];
-    }
-
-    private static function credentials(): PayUCredentials
-    {
-        return new PayUCredentials(FakePayU::POS_ID, FakePayU::SECOND_KEY, FakePayU::CLIENT_ID, FakePayU::CLIENT_SECRET, Environment::Sandbox);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function orderBody(string $extOrderId): array
-    {
-        return [
-            'notifyUrl' => 'https://shop.example/payment-methods/PAYU',
-            'continueUrl' => 'https://shop.example/after-pay',
-            'customerIp' => '127.0.0.1',
-            'merchantPosId' => FakePayU::POS_ID,
-            'description' => 'Order 000001',
-            'currencyCode' => 'PLN',
-            'totalAmount' => '1500',
-            'extOrderId' => $extOrderId,
-            'products' => [['name' => 'Order 000001', 'unitPrice' => '1500', 'quantity' => '1']],
-        ];
     }
 }

@@ -30,7 +30,7 @@ use function str_starts_with;
  * Logs only HTTP status codes, PayU status codes and identifiers. Request bodies, tokens and
  * credentials are never logged nor put into exception messages.
  */
-final readonly class PayUClient implements PayUClientInterface
+final readonly class PayUClient implements PayUClientInterface, PayURefundReaderInterface
 {
     private const STATUS_SUCCESS = 'SUCCESS';
 
@@ -140,6 +140,37 @@ final readonly class PayUClient implements PayUClientInterface
         $this->logger->info('PayU refund created.', ['payu_order_id' => $orderId, 'payu_refund_id' => $refundId, 'status' => $status]);
 
         return new RefundCreated($refundId, Json::string($refundData, 'extRefundId'), $status, (int) $amount, $currency);
+    }
+
+    public function retrieveRefunds(PayUCredentials $credentials, string $orderId): array
+    {
+        [$statusCode, $data] = $this->request($credentials, 'GET', '/api/v2_1/orders/' . rawurlencode($orderId) . '/refunds');
+
+        // The refund list carries no "status" object, unlike the other PayU responses.
+        if (200 !== $statusCode) {
+            throw $this->apiError('Retrieving PayU refunds failed', $statusCode, $data);
+        }
+
+        $items = $data['refunds'] ?? null;
+        if (!is_array($items)) {
+            throw new PayUApiException('PayU refund list response has no "refunds" list.', $statusCode);
+        }
+
+        $refunds = [];
+        foreach ($items as $item) {
+            $item = is_array($item) ? $item : [];
+            $refundId = Json::string($item, 'refundId');
+            $status = Json::string($item, 'status');
+            $amount = $item['amount'] ?? null;
+            $currency = Json::string($item, 'currencyCode');
+            if (null === $refundId || null === $status || !is_numeric($amount) || null === $currency) {
+                throw new PayUApiException('PayU refund list response is incomplete.', $statusCode);
+            }
+
+            $refunds[] = new RefundCreated($refundId, Json::string($item, 'extRefundId'), $status, (int) $amount, $currency);
+        }
+
+        return $refunds;
     }
 
     /**

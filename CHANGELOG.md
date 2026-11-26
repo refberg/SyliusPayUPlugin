@@ -7,13 +7,14 @@
 - Support for applications without the Sylius shop (`SyliusShopBundle`) or the admin panel (`SyliusAdminBundle`, `SyliusTwigHooksBundle`). Without the shop, the application must import the payment notification route `@SyliusPaymentBundle/Resources/config/routing/integrations/sylius.yaml`.
 - Service interfaces, which are also the service IDs, for decoration: `Notification\NotificationParserInterface`, `Order\ExtOrderIdGeneratorInterface`, `Order\PayUOrderValidatorInterface`, `Payment\PaymentStateApplierInterface` and `Payment\PaymentSynchronizerInterface` (namespace `Refberg\SyliusPayUPlugin`). The `RESULT_*` constants are defined in `PaymentStateApplierInterface` and `PaymentSynchronizerInterface`.
 - When Sylius cancels the capture payment request of a PayU order that is still `NEW` (e.g. the customer switched the payment method), the plugin asks PayU to cancel that order. The result is only logged.
+- `Api\PayURefundReaderInterface` (service ID of the same name, implemented by `PayUClient`) that reads the refunds of a PayU order, and `PaymentSynchronizerInterface::retrieveRefund()`. `PayUClientInterface` is unchanged; a decorator of it does not affect refund reads.
 - Constants for the gateway configuration keys (`PayUGateway::CONFIG_*`) and the final refund statuses (`RefundCreated::STATUS_FINALIZED`, `RefundCreated::STATUS_CANCELED`, `RefundCreated::isFinalStatus()`).
 
 ### Changed
 
 - PayU orders `PENDING` and `WAITING_FOR_CONFIRMATION` move a `new` payment that still uses a PayU method to `processing` (1.0.0 left it `new`), so while PayU processes the payment Sylius blocks changing the payment method in the shop and through the API (`PATCH` of the payment), and the shop **Pay** leads to the thank-you page. The applier returns the new result `PaymentStateApplierInterface::RESULT_PROCESSING`.
 - A PayU order paid after the Sylius payment was already completed by another order, failed or cancelled is logged as `critical` instead of `error`. The warning names in the payment details are unchanged.
-- New optional last constructor arguments: `PaymentStateApplier` (`CredentialsResolverInterface`), `NotifyPaymentRequestHandler` and `StatusPaymentRequestHandler` (`PaymentRequestRepositoryInterface`).
+- New optional last constructor arguments: `PaymentStateApplier` (`CredentialsResolverInterface`), `NotifyPaymentRequestHandler` and `StatusPaymentRequestHandler` (`PaymentRequestRepositoryInterface`), `PaymentSynchronizer` (`PayURefundReaderInterface`; without it no refund notification is accepted).
 - Requires `sylius/sylius` 2.2.13+ or 2.3.3+, the first versions with the fixes for the Sylius security advisories GHSA-qf53-r587-295p, GHSA-vhpc-rcxq-vfgr and GHSA-fpgw-g9hj-m43q of 2026-11-18 (Composer refuses to install the vulnerable versions).
 
 ### Deprecated
@@ -31,6 +32,7 @@
 - Capture checks the payment state after acquiring the payment lock, so a payment completed in the meantime gets no new PayU order.
 - A notification is answered with HTTP 5xx, so PayU retries it, when the PayU API rejects the plugin credentials (HTTP 401/403).
 - A refund made in the PayU panel that is finalized after a PENDING notification marks the payment as refunded once finalized refunds cover it.
+- Refund notifications no longer trust the notification body: after the signature check, the refund status, amount and currency are read from the PayU API (`GET /api/v2_1/orders/{orderId}/refunds`). A refund that the API does not list for the order in the payment currency fails the notification payment request without changing the payment, and so does a refund notification without `refundId` (1.0.0 completed it without changes). When the notification reports a final refund status that the API does not show yet, the endpoint answers with HTTP 5xx, so PayU retries it, and nothing changes. A refund made in the PayU panel that is larger than the payment is ignored.
 - The cancel payment request completes only when PayU reports the order as `CANCELED` after the cancel call; PayU answers the cancel of a paid order with success, which the plugin used to record as canceled.
 
 ### Removed

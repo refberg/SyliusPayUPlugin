@@ -8,6 +8,7 @@ use Refberg\SyliusPayUPlugin\Api\AccessTokenProvider;
 use Refberg\SyliusPayUPlugin\Api\AccessTokenProviderInterface;
 use Refberg\SyliusPayUPlugin\Api\PayUClient;
 use Refberg\SyliusPayUPlugin\Api\PayUClientInterface;
+use Refberg\SyliusPayUPlugin\Api\PayURefundReaderInterface;
 use Refberg\SyliusPayUPlugin\Command\CancelPaymentRequest;
 use Refberg\SyliusPayUPlugin\Command\CapturePaymentRequest;
 use Refberg\SyliusPayUPlugin\Command\NotifyPaymentRequest;
@@ -63,14 +64,17 @@ return static function (ContainerConfigurator $container): void {
     $services->set(AccessTokenProviderInterface::class, AccessTokenProvider::class)
         ->args([service('refberg_payu.http_client'), service('refberg_payu.cache'), param('refberg_payu.http_timeout')]);
 
-    $services->set(PayUClientInterface::class, PayUClient::class)
-        ->args([
-            service('refberg_payu.http_client'),
-            service(AccessTokenProviderInterface::class),
-            service('logger')->ignoreOnInvalid(),
-            param('refberg_payu.http_timeout'),
-        ])
-        ->tag('monolog.logger', ['channel' => 'payu']);
+    // A separate service, so decorating or replacing PayUClientInterface does not drop the refund reads.
+    foreach ([PayUClientInterface::class, PayURefundReaderInterface::class] as $id) {
+        $services->set($id, PayUClient::class)
+            ->args([
+                service('refberg_payu.http_client'),
+                service(AccessTokenProviderInterface::class),
+                service('logger')->ignoreOnInvalid(),
+                param('refberg_payu.http_timeout'),
+            ])
+            ->tag('monolog.logger', ['channel' => 'payu']);
+    }
 
     $services->set(SignatureVerifierInterface::class, SignatureVerifier::class);
     $services->set(NotificationParserInterface::class, NotificationParser::class)->args([service(SignatureVerifierInterface::class)]);
@@ -94,6 +98,7 @@ return static function (ContainerConfigurator $container): void {
             service(PayUOrderValidatorInterface::class),
             service(PaymentStateApplierInterface::class),
             service('logger')->ignoreOnInvalid(),
+            service(PayURefundReaderInterface::class),
         ])
         ->tag('monolog.logger', ['channel' => 'payu']);
 

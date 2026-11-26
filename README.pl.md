@@ -117,6 +117,14 @@ Do ręcznych testów możesz użyć publicznego punktu płatności PLN w sandbox
 
 Jeśli żądania płatności są przetwarzane asynchronicznie (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` inny niż `sync://`),
 ustaw `framework.router.default_uri` na publiczny adres sklepu, żeby adres powiadomień był generowany poprawnie.
+Odrzucone powiadomienia nadal dostają HTTP 400, 404 lub 503, jak opisano niżej, bo są sprawdzane przed wysłaniem
+żądania płatności. Błędy przy obsłudze przyjętego powiadomienia (API PayU niedostępne albo odrzuca dane dostępowe
+pluginu, końcowy status zwrotu jeszcze niewidoczny w API PayU) dają HTTP 200 zamiast 5xx, więc PayU nie ponawia powiadomienia.
+Messenger ponawia tylko te błędy (nie żądania płatności oznaczone jako nieudane), zgodnie z `retry_strategy` transportu
+`payment_request`, a potem wysyła wiadomość do transportu błędów `payment_request_failed`. Domyślnie jest to `sync://`
+(`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_FAILED_DSN`), który obsługuje wiadomość jeszcze raz zamiast ją zachować;
+ustaw trwały transport, żeby nieudane wiadomości zostawały, i ponawiaj je poleceniem
+`messenger:failed:retry --transport=payment_request_failed`. Pomaga też dłuższe `retry_strategy` dla `payment_request`.
 
 Żądania do PayU (OAuth i REST API) mają limit bezczynności 15 sekund, ustawiony parametrem `refberg_payu.http_timeout`.
 Aby go zmienić, ustaw parametr w konfiguracji aplikacji:
@@ -292,14 +300,20 @@ może do tego zamówienia nie trafić:
 W obu przypadkach zwrot lub anulowanie trzeba zrobić w panelu PayU.
 
 Powiadomienia bez podpisu lub z błędnym podpisem dostają odpowiedź HTTP 400 i nie są zapisywane. Powiadomienia
-dotyczące nieznanych zamówień dostają HTTP 404. Gdy API PayU jest niedostępne albo odrzuca dane dostępowe pluginu
+dotyczące nieznanych zamówień dostają HTTP 404. Gdy metoda płatności PayU nie jest skonfigurowana, endpoint odpowiada HTTP 503. Gdy API PayU jest niedostępne albo odrzuca dane dostępowe pluginu
 (HTTP 401/403), endpoint odpowiada HTTP 5xx, więc PayU ponowi powiadomienie później.
 
 ### Zwroty
 
 Kliknij **Zwrot** przy opłaconej płatności PayU w panelu admina. Plugin zleca w PayU pełny zwrot
 (`extRefundId` to identyfikator żądania płatności, więc ponownie dostarczone żądanie nie tworzy drugiego zwrotu).
-Końcowy status zwrotu z powiadomienia PayU jest zapisywany w szczegółach płatności.
+Końcowy status zwrotu jest zapisywany w szczegółach płatności.
+
+Po weryfikacji podpisu powiadomienia o zwrocie plugin odczytuje zwrot z API PayU
+(`GET /api/v2_1/orders/{orderId}/refunds`) i stamtąd bierze jego status, kwotę i walutę, a nie z treści powiadomienia.
+Jeśli API nie zwraca tego zwrotu dla zamówienia w walucie płatności, żądanie powiadomienia zostaje oznaczone
+jako nieudane i nic się nie zmienia. Gdy powiadomienie podaje końcowy status zwrotu, którego API jeszcze nie pokazuje,
+endpoint odpowiada HTTP 5xx i nic nie zmienia, więc PayU ponowi powiadomienie później.
 
 Zwroty zlecone wcześniej w panelu PayU (poza anulowanymi) są odejmowane od kwoty zwrotu. Gdy pokrywają całą
 płatność, plugin nie wywołuje PayU i oznacza żądanie zwrotu jako zakończone.
@@ -324,7 +338,8 @@ sprawdź wtedy zamówienie w panelu PayU.
 
 ### Zwroty zlecone w panelu PayU
 
-Podpisane powiadomienie o zwrocie, którego nie zlecił Sylius, jest zapisywane w szczegółach płatności.
+Podpisane powiadomienie o zwrocie, którego nie zlecił Sylius, jest zapisywane w szczegółach płatności, chyba że
+kwota zwrotu odczytana z API PayU jest większa niż płatność.
 Gdy zakończone zwroty pokryją całą kwotę płatności, płatność przechodzi w stan `refunded`, a do PayU nie jest
 wysyłany kolejny zwrot. Zwroty częściowe są widoczne tylko w szczegółach płatności, bo Sylius nie ma dla nich stanu.
 
@@ -347,6 +362,7 @@ Poniższe serwisy są zarejestrowane pod swoim interfejsem. Dekoruj lub podmieni
 |---------------------------------------------------------------------|------------------------------------------------------|
 | `Refberg\SyliusPayUPlugin\Api\AccessTokenProviderInterface`         | token OAuth do API PayU                              |
 | `Refberg\SyliusPayUPlugin\Api\PayUClientInterface`                  | wywołania REST API PayU                              |
+| `Refberg\SyliusPayUPlugin\Api\PayURefundReaderInterface`            | odczyt zwrotów zamówienia PayU                       |
 | `Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface`      | dane dostępowe PayU z konfiguracji bramki            |
 | `Refberg\SyliusPayUPlugin\Signature\SignatureVerifierInterface`     | weryfikacja nagłówka `OpenPayu-Signature`            |
 | `Refberg\SyliusPayUPlugin\Notification\NotificationParserInterface` | parsowanie podpisanych powiadomień                   |
@@ -356,6 +372,9 @@ Poniższe serwisy są zarejestrowane pod swoim interfejsem. Dekoruj lub podmieni
 | `Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface`           | blokada płatności                                    |
 | `Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface`     | zmiana stanu płatności                               |
 | `Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface`     | pobranie, sprawdzenie i zastosowanie zamówienia PayU |
+
+`PayURefundReaderInterface` to osobny serwis (również `PayUClient`), więc dekorator lub podmiana
+`PayUClientInterface` nie zmienia odczytu zwrotów; gdy trzeba, dekoruj oba.
 
 Na przykład zmiana formatu `extOrderId`:
 

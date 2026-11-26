@@ -117,6 +117,14 @@ For manual tests you can use the public PLN sandbox POS published in the
 
 If payment requests are processed asynchronously (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_DSN` other than `sync://`),
 set `framework.router.default_uri` to the public shop URL, so the notification URL is generated correctly.
+Rejected notifications still get HTTP 400, 404 or 503 as described below, because they are checked before the payment
+request is dispatched. Errors while handling an accepted notification (PayU API unreachable or rejecting the plugin
+credentials, a final refund status not yet shown by the PayU API) get HTTP 200 instead of 5xx, so PayU does not retry.
+Messenger retries only these errors (not payment requests marked as failed), according to the `retry_strategy` of the
+`payment_request` transport, and then sends the message to the `payment_request_failed` failure transport. That transport
+is `sync://` by default (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_FAILED_DSN`), which handles the message once more
+instead of keeping it; set it to a persistent transport to keep failed messages, then retry them with
+`messenger:failed:retry --transport=payment_request_failed`. A longer `retry_strategy` for `payment_request` also helps.
 
 Requests to PayU (OAuth and REST API) use an idle timeout of 15 seconds, set by the `refberg_payu.http_timeout`
 parameter. To change it, set the parameter in the application configuration:
@@ -291,14 +299,20 @@ reach that order:
 In both cases refund or cancel the order in the PayU panel.
 
 Notifications with a missing or invalid signature get HTTP 400 and are not stored. Notifications for unknown
-orders get HTTP 404. When the PayU API cannot be reached or rejects the plugin credentials (HTTP 401/403),
+orders get HTTP 404. When the PayU payment method is not configured, the endpoint answers with HTTP 503. When the PayU API cannot be reached or rejects the plugin credentials (HTTP 401/403),
 the endpoint answers with HTTP 5xx, so PayU retries later.
 
 ### Refunds
 
 Click **Refund** on a completed PayU payment in the admin panel. The plugin requests a full refund in PayU
 (`extRefundId` is the payment request ID, so a redelivered request does not create a second refund). The final
-refund status from the PayU notification is stored in the payment details.
+refund status is stored in the payment details.
+
+After verifying the signature of a refund notification, the plugin reads the refund from the PayU API
+(`GET /api/v2_1/orders/{orderId}/refunds`) and takes its status, amount and currency from there, not from the
+notification body. A refund that the API does not list for the order in the payment currency fails the notification
+payment request and changes nothing. When the notification reports a final refund status that the API does not show yet,
+the endpoint answers with HTTP 5xx and changes nothing, so PayU retries the notification later.
 
 Refunds already made in the PayU panel (except canceled ones) are subtracted from the requested amount. When they
 cover the whole payment, the plugin does not call PayU and completes the refund payment request.
@@ -323,7 +337,8 @@ cancel request automatically, also when PayU was unavailable (timeout, HTTP 5xx)
 
 ### Refunds made in the PayU panel
 
-A signed refund notification for a refund that Sylius did not request is recorded in the payment details.
+A signed refund notification for a refund that Sylius did not request is recorded in the payment details, unless
+its amount read from the PayU API is larger than the payment.
 When finalized refunds cover the whole payment amount, the payment is moved to `refunded` without sending another
 refund to PayU. Partial refunds only show up in the payment details, because Sylius has no state for them.
 
@@ -346,6 +361,7 @@ The services below are registered under their interface. Decorate or replace the
 |---------------------------------------------------------------------|--------------------------------------------------|
 | `Refberg\SyliusPayUPlugin\Api\AccessTokenProviderInterface`         | OAuth token for the PayU API                     |
 | `Refberg\SyliusPayUPlugin\Api\PayUClientInterface`                  | PayU REST API calls                              |
+| `Refberg\SyliusPayUPlugin\Api\PayURefundReaderInterface`            | Reading the refunds of a PayU order              |
 | `Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface`      | PayU credentials from the gateway configuration  |
 | `Refberg\SyliusPayUPlugin\Signature\SignatureVerifierInterface`     | `OpenPayu-Signature` header verification         |
 | `Refberg\SyliusPayUPlugin\Notification\NotificationParserInterface` | Signed notification parsing                      |
@@ -355,6 +371,9 @@ The services below are registered under their interface. Decorate or replace the
 | `Refberg\SyliusPayUPlugin\Payment\PaymentLockerInterface`           | Payment lock                                     |
 | `Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface`     | Payment state changes                            |
 | `Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface`     | Fetching, checking and applying a PayU order     |
+
+`PayURefundReaderInterface` is a separate service (also `PayUClient`), so a decorator or replacement of
+`PayUClientInterface` does not change how refunds are read; decorate both when you need to.
 
 For example, to change the `extOrderId` format:
 

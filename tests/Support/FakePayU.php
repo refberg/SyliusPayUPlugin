@@ -6,6 +6,8 @@ namespace Tests\Refberg\SyliusPayUPlugin\Support;
 
 use LogicException;
 use OutOfBoundsException;
+use Refberg\SyliusPayUPlugin\Config\Environment;
+use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use function array_filter;
@@ -32,6 +34,7 @@ use function str_starts_with;
 use function strtolower;
 use function substr;
 use function trim;
+use const ARRAY_FILTER_USE_KEY;
 use const JSON_THROW_ON_ERROR;
 
 /**
@@ -56,6 +59,9 @@ final class FakePayU
 
     /** @var array<array-key, array<string, mixed>> */
     private array $refunds = [];
+
+    /** @var array<array-key, string> */
+    private array $refundOrderIds = [];
 
     /** @var list<array{method: string, path: string, body: string, headers: array<string, string>}> */
     private array $requests = [];
@@ -115,6 +121,10 @@ final class FakePayU
             return $this->createRefund(rawurldecode($matches[1]), $body);
         }
 
+        if (1 === preg_match('#^/api/v2_1/orders/([^/]+)/refunds$#', $path, $matches) && 'GET' === $method) {
+            return $this->retrieveRefunds(rawurldecode($matches[1]));
+        }
+
         if (1 === preg_match('#^/api/v2_1/orders/([^/]+)$#', $path, $matches) && 'GET' === $method) {
             return $this->retrieveOrder(rawurldecode($matches[1]));
         }
@@ -140,8 +150,17 @@ final class FakePayU
             'description' => 'Panel refund',
             'status' => 'PENDING',
         ];
+        $this->refundOrderIds[$refundId] = $orderId;
 
         return $refundId;
+    }
+
+    public function setRefundStatus(string $refundId, string $status): void
+    {
+        if (!isset($this->refunds[$refundId])) {
+            throw new OutOfBoundsException('Unknown refund.');
+        }
+        $this->refunds[$refundId]['status'] = $status;
     }
 
     public function setOrderStatus(string $orderId, string $status): void
@@ -229,16 +248,42 @@ final class FakePayU
         ], JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * Builds a refund notification body and moves the refund to that status, as PayU notifies about its own state.
+     */
     public function refundNotificationBody(string $orderId, string $refundId, string $status): string
     {
         $order = $this->order($orderId);
-        $refund = $this->refunds[$refundId] ?? throw new OutOfBoundsException('Unknown refund.');
+        $this->setRefundStatus($refundId, $status);
 
         return json_encode([
             'orderId' => $orderId,
             'extOrderId' => $order['extOrderId'],
-            'refund' => array_merge($refund, ['status' => $status]),
+            'refund' => $this->refunds[$refundId],
         ], JSON_THROW_ON_ERROR);
+    }
+
+    public static function credentials(): PayUCredentials
+    {
+        return new PayUCredentials(self::POS_ID, self::SECOND_KEY, self::CLIENT_ID, self::CLIENT_SECRET, Environment::Sandbox);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function orderBody(string $extOrderId): array
+    {
+        return [
+            'notifyUrl' => 'https://shop.example/payment-methods/PAYU',
+            'continueUrl' => 'https://shop.example/after-pay',
+            'customerIp' => '127.0.0.1',
+            'merchantPosId' => self::POS_ID,
+            'description' => 'Order 000001',
+            'currencyCode' => 'PLN',
+            'totalAmount' => '1500',
+            'extOrderId' => $extOrderId,
+            'products' => [['name' => 'Order 000001', 'unitPrice' => '1500', 'quantity' => '1']],
+        ];
     }
 
     public static function signatureHeader(string $body, string $secondKey = self::SECOND_KEY, string $algorithm = 'SHA-256'): string
@@ -350,8 +395,21 @@ final class FakePayU
             'description' => $refund['description'] ?? '',
             'status' => 'PENDING',
         ];
+        $this->refundOrderIds[$refundId] = $orderId;
 
         return self::json(200, ['orderId' => $orderId, 'refund' => $this->refunds[$refundId], 'status' => ['statusCode' => 'SUCCESS', 'statusDesc' => 'Refund queued for processing']]);
+    }
+
+    private function retrieveRefunds(string $orderId): ResponseInterface
+    {
+        if (!isset($this->orders[$orderId])) {
+            return self::json(404, ['status' => ['statusCode' => 'DATA_NOT_FOUND']]);
+        }
+
+        $refunds = array_filter($this->refunds, fn (int|string $refundId): bool => $this->refundOrderIds[$refundId] === $orderId, ARRAY_FILTER_USE_KEY);
+
+        // Like the PayU sandbox: no "status" object in the refund list.
+        return self::json(200, ['refunds' => array_values($refunds)]);
     }
 
     private static function str(mixed $value): string

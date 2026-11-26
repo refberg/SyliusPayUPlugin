@@ -154,6 +154,28 @@ final class CancelAndExternalRefundTest extends IntegrationTestCase
         self::assertSame(0, $this->details($payment)->finalizedRefundAmount());
     }
 
+    public function test_finalized_refund_notification_ahead_of_the_payu_api_is_retried_until_the_api_shows_it(): void
+    {
+        $payment = $this->paidPayment();
+        $orderId = $this->payu->lastOrderId();
+        $refundId = $this->payu->createPanelRefund($orderId, 1500);
+
+        // Correctly signed, claims FINALIZED, but the PayU API still lists the refund as PENDING.
+        $body = $this->payu->refundNotificationBody($orderId, $refundId, 'FINALIZED');
+        $this->payu->setRefundStatus($refundId, 'PENDING');
+        $this->client->catchExceptions(true);
+        self::assertGreaterThanOrEqual(500, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
+
+        self::assertSame('completed', $this->reloadPayment($payment)->getState());
+        self::assertSame([], $this->details($payment)->refunds());
+
+        $this->payu->setRefundStatus($refundId, 'FINALIZED');
+        self::assertSame(Response::HTTP_OK, $this->notify($body, FakePayU::signatureHeader($body))->getStatusCode());
+
+        self::assertSame('refunded', $this->reloadPayment($payment)->getState());
+        self::assertSame(1500, $this->details($payment)->finalizedRefundAmount());
+    }
+
     private function paidPayment(): PaymentInterface
     {
         $payment = $this->createPlacedOrder();
