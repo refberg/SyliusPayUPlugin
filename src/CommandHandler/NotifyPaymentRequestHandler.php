@@ -85,8 +85,22 @@ final readonly class NotifyPaymentRequestHandler
         }
 
         if (Notification::TYPE_REFUND === $notification->type) {
-            $this->handleRefund($notification, $details, $payment);
-            $this->completeRequest($paymentRequest, ['type' => Notification::TYPE_REFUND, 'refund_status' => $notification->refundStatus]);
+            try {
+                $refund = null === $notification->refundId ? null : $this->synchronizer->retrieveRefund($payment, $notification->orderId, $notification->refundId, $credentials);
+            } catch (PayUApiException $exception) {
+                $this->failOrRethrow($paymentRequest, $exception);
+
+                return;
+            }
+
+            if (!$refund instanceof RefundCreated) {
+                $this->failRequest($paymentRequest, 'The PayU API does not list this refund for the order.');
+
+                return;
+            }
+
+            $this->handleRefund($notification->orderId, $refund, $details, $payment);
+            $this->completeRequest($paymentRequest, ['type' => Notification::TYPE_REFUND, 'refund_status' => $refund->status]);
 
             return;
         }
@@ -94,12 +108,7 @@ final readonly class NotifyPaymentRequestHandler
         try {
             $result = $this->synchronizer->synchronize($payment, $notification->orderId, $credentials);
         } catch (PayUApiException $exception) {
-            // Rejected credentials are fixed by the merchant, so PayU should keep retrying until then.
-            if ($exception->isTransient() || in_array($exception->getHttpStatusCode(), [401, 403], true)) {
-                throw $exception;
-            }
-
-            $this->failRequest($paymentRequest, $exception->getMessage());
+            $this->failOrRethrow($paymentRequest, $exception);
 
             return;
         }
@@ -117,19 +126,28 @@ final readonly class NotifyPaymentRequestHandler
         ]);
     }
 
-    private function handleRefund(Notification $notification, PaymentDetails $details, PaymentInterface $payment): void
+    /**
+     * @throws PayUApiException
+     */
+    private function failOrRethrow(PaymentRequestInterface $paymentRequest, PayUApiException $exception): void
     {
-        if (null === $notification->refundId || null === $notification->refundStatus) {
-            return;
+        // Rejected credentials are fixed by the merchant, so PayU should keep retrying until then.
+        if ($exception->isTransient() || in_array($exception->getHttpStatusCode(), [401, 403], true)) {
+            throw $exception;
         }
 
-        if ($details->updateRefundStatus($notification->refundId, $notification->extRefundId, $notification->refundStatus)) {
+        $this->failRequest($paymentRequest, $exception->getMessage());
+    }
+
+    private function handleRefund(string $orderId, RefundCreated $refund, PaymentDetails $details, PaymentInterface $payment): void
+    {
+        if ($details->updateRefundStatus($refund->refundId, $refund->extRefundId, $refund->status)) {
             $details->save();
 
-            if (RefundCreated::STATUS_CANCELED === $notification->refundStatus) {
+            if (RefundCreated::STATUS_CANCELED === $refund->status) {
                 $this->logger->error('PayU canceled a refund; it has to be handled manually.', [
-                    'payu_order_id' => $notification->orderId,
-                    'payu_refund_id' => $notification->refundId,
+                    'payu_order_id' => $orderId,
+                    'payu_refund_id' => $refund->refundId,
                 ]);
             }
             $this->refundPaymentWhenCovered($details, $payment);
@@ -137,7 +155,7 @@ final readonly class NotifyPaymentRequestHandler
             return;
         }
 
-        $this->handleExternalRefund($notification, $details, $payment);
+        $this->handleExternalRefund($orderId, $refund, $details, $payment);
     }
 
     /**
@@ -145,32 +163,31 @@ final readonly class NotifyPaymentRequestHandler
      * refunds cover the whole payment, the payment is moved to "refunded".
      * A partial refund does not change the payment state: Sylius has no state for it.
      */
-    private function handleExternalRefund(Notification $notification, PaymentDetails $details, PaymentInterface $payment): void
+    private function handleExternalRefund(string $orderId, RefundCreated $refund, PaymentDetails $details, PaymentInterface $payment): void
     {
         if (
-            $notification->orderId !== $details->getCompletedOrderId() ||
-            null === $notification->refundAmount ||
-            null === $notification->refundCurrency ||
-            $notification->refundCurrency !== $payment->getCurrencyCode()
+            $orderId !== $details->getCompletedOrderId() ||
+            $refund->amount <= 0 ||
+            $refund->amount > (int) $payment->getAmount()
         ) {
             $this->logger->warning('Ignored PayU refund notification that does not match the paid order.', [
                 'payment_id' => $payment->getId(),
-                'payu_order_id' => $notification->orderId,
-                'payu_refund_id' => $notification->refundId,
+                'payu_order_id' => $orderId,
+                'payu_refund_id' => $refund->refundId,
             ]);
 
             return;
         }
 
-        if (!$details->recordExternalRefund((string) $notification->refundId, (string) $notification->refundStatus, $notification->refundAmount, $notification->refundCurrency)) {
+        if (!$details->recordExternalRefund($refund->refundId, $refund->status, $refund->amount, $refund->currencyCode)) {
             return;
         }
         $details->save();
 
         $this->logger->info('Recorded a PayU refund made outside Sylius.', [
             'payment_id' => $payment->getId(),
-            'payu_refund_id' => $notification->refundId,
-            'status' => $notification->refundStatus,
+            'payu_refund_id' => $refund->refundId,
+            'status' => $refund->status,
         ]);
 
         $this->refundPaymentWhenCovered($details, $payment);

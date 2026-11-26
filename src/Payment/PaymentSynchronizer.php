@@ -7,7 +7,9 @@ namespace Refberg\SyliusPayUPlugin\Payment;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Refberg\SyliusPayUPlugin\Api\Exception\PayUException;
+use Refberg\SyliusPayUPlugin\Api\Model\RefundCreated;
 use Refberg\SyliusPayUPlugin\Api\PayUClientInterface;
+use Refberg\SyliusPayUPlugin\Api\PayURefundReaderInterface;
 use Refberg\SyliusPayUPlugin\Config\PayUCredentials;
 use Refberg\SyliusPayUPlugin\Order\PayUOrderValidatorInterface;
 use Sylius\Component\Payment\Model\PaymentInterface;
@@ -22,6 +24,7 @@ final readonly class PaymentSynchronizer implements PaymentSynchronizerInterface
         private PayUOrderValidatorInterface $validator,
         private PaymentStateApplierInterface $stateApplier,
         private LoggerInterface $logger = new NullLogger(),
+        private ?PayURefundReaderInterface $refundReader = null,
     ) {
     }
 
@@ -46,5 +49,26 @@ final readonly class PaymentSynchronizer implements PaymentSynchronizerInterface
         }
 
         return $this->stateApplier->apply($payment, $order);
+    }
+
+    public function retrieveRefund(PaymentInterface $payment, string $orderId, string $refundId, PayUCredentials $credentials): ?RefundCreated
+    {
+        if (!$this->refundReader instanceof PayURefundReaderInterface) {
+            $this->logger->error('No PayU refund reader is configured, so the refund cannot be confirmed; state not changed.', [
+                'payment_id' => $payment->getId(),
+                'payu_order_id' => $orderId,
+                'payu_refund_id' => $refundId,
+            ]);
+
+            return null;
+        }
+
+        foreach ($this->refundReader->retrieveRefunds($credentials, $orderId) as $refund) {
+            if ($refund->refundId === $refundId && $refund->currencyCode === $payment->getCurrencyCode()) {
+                return $refund;
+            }
+        }
+
+        return null;
     }
 }
