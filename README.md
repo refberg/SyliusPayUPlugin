@@ -121,8 +121,10 @@ Rejected notifications still get HTTP 400, 404 or 503 as described below, becaus
 request is dispatched. Errors while handling an accepted notification (PayU API unreachable or rejecting the plugin
 credentials, a final refund status not yet shown by the PayU API) get HTTP 200 instead of 5xx, so PayU does not retry.
 Messenger retries only these errors (not payment requests marked as failed), according to the `retry_strategy` of the
-`payment_request` transport, and then moves the message to the `payment_request_failed` failure transport. Configure
-a longer `retry_strategy` for that transport, or retry the messages with `messenger:failed:retry`.
+`payment_request` transport, and then sends the message to the `payment_request_failed` failure transport. That transport
+is `sync://` by default (`SYLIUS_MESSENGER_TRANSPORT_PAYMENT_REQUEST_FAILED_DSN`), which handles the message once more
+instead of keeping it; set it to a persistent transport to keep failed messages, then retry them with
+`messenger:failed:retry --transport=payment_request_failed`. A longer `retry_strategy` for `payment_request` also helps.
 
 Requests to PayU (OAuth and REST API) use an idle timeout of 15 seconds, set by the `refberg_payu.http_timeout`
 parameter. To change it, set the parameter in the application configuration:
@@ -297,7 +299,7 @@ reach that order:
 In both cases refund or cancel the order in the PayU panel.
 
 Notifications with a missing or invalid signature get HTTP 400 and are not stored. Notifications for unknown
-orders get HTTP 404. When the PayU API cannot be reached or rejects the plugin credentials (HTTP 401/403),
+orders get HTTP 404. When the PayU payment method is not configured, the endpoint answers with HTTP 503. When the PayU API cannot be reached or rejects the plugin credentials (HTTP 401/403),
 the endpoint answers with HTTP 5xx, so PayU retries later.
 
 ### Refunds
