@@ -18,6 +18,8 @@ interface PaymentStateApplierInterface
 
     public const RESULT_FAILED = 'failed';
 
+    public const RESULT_PROCESSING = 'processing';
+
     public const RESULT_UNCHANGED = 'unchanged';
 
     public const RESULT_WARNING = 'warning';

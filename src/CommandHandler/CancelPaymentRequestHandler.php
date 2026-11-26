@@ -24,7 +24,8 @@ use function sprintf;
 /**
  * Cancels every PayU order of the payment that may still be paid, after the payment
  * was cancelled in Sylius (e.g. by an administrator). Without it the customer could still
- * pay a cancelled order.
+ * pay a cancelled order. PayU answers the cancel of a COMPLETED order with success too,
+ * so the order is read back to find out whether it was really canceled.
  */
 final readonly class CancelPaymentRequestHandler
 {
@@ -71,16 +72,25 @@ final readonly class CancelPaymentRequestHandler
         foreach ($details->getOpenOrderIds() as $orderId) {
             try {
                 $this->client->cancelOrder($credentials, $orderId);
-                $details->recordOrderStatus($orderId, PayUOrder::STATUS_CANCELED);
-                $canceled[] = $orderId;
+                $status = $this->client->retrieveOrder($credentials, $orderId)->status;
+                if (PayUOrder::STATUS_CANCELED === $status) {
+                    $details->recordOrderStatus($orderId, PayUOrder::STATUS_CANCELED);
+                    $canceled[] = $orderId;
+
+                    continue;
+                }
+
+                $reason = sprintf('PayU order "%s" is "%s" after the cancel request.', $orderId, $status);
             } catch (PayUException $exception) {
-                $errors[] = $exception->getMessage();
-                $this->logger->error('Could not cancel PayU order; check it in the PayU panel.', [
-                    'payment_id' => $payment->getId(),
-                    'payu_order_id' => $orderId,
-                    'reason' => $exception->getMessage(),
-                ]);
+                $reason = $exception->getMessage();
             }
+
+            $errors[] = $reason;
+            $this->logger->error('Could not cancel PayU order; check it in the PayU panel.', [
+                'payment_id' => $payment->getId(),
+                'payu_order_id' => $orderId,
+                'reason' => $reason,
+            ]);
         }
         $details->save();
 

@@ -16,6 +16,8 @@ use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplierInterface;
 use Refberg\SyliusPayUPlugin\Payment\PaymentSynchronizerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PaymentBundle\Provider\PaymentRequestProviderInterface;
+use Sylius\Component\Payment\Model\PaymentRequestInterface;
+use Sylius\Component\Payment\Repository\PaymentRequestRepositoryInterface;
 use function array_slice;
 
 /**
@@ -27,6 +29,9 @@ final readonly class StatusPaymentRequestHandler
 {
     use PaymentRequestHandlerTrait;
 
+    /**
+     * @param PaymentRequestRepositoryInterface<PaymentRequestInterface>|null $paymentRequestRepository
+     */
     public function __construct(
         private PaymentRequestProviderInterface $paymentRequestProvider,
         private CredentialsResolverInterface $credentialsResolver,
@@ -34,6 +39,7 @@ final readonly class StatusPaymentRequestHandler
         private PaymentLockerInterface $paymentLocker,
         private StateMachineInterface $stateMachine,
         private LoggerInterface $logger = new NullLogger(),
+        private ?PaymentRequestRepositoryInterface $paymentRequestRepository = null,
     ) {
     }
 
@@ -53,6 +59,7 @@ final readonly class StatusPaymentRequestHandler
                     $this->restorePaidMethod($payment, $method, $orderId);
                 }
             }
+            $this->closeCaptureRequests($this->paymentRequestRepository, $payment);
         } catch (PayUException|InvalidConfigurationException $exception) {
             $this->logger->warning('Could not check PayU order status.', [
                 'payment_id' => $payment->getId(),

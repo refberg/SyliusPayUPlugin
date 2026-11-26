@@ -7,9 +7,13 @@ namespace Tests\Refberg\SyliusPayUPlugin\Unit\Payment;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Refberg\SyliusPayUPlugin\Api\Model\PayUOrder;
+use Refberg\SyliusPayUPlugin\Config\CredentialsResolver;
 use Refberg\SyliusPayUPlugin\Payment\PaymentDetails;
 use Refberg\SyliusPayUPlugin\Payment\PaymentStateApplier;
+use Refberg\SyliusPayUPlugin\PayUGateway;
+use Sylius\Bundle\PayumBundle\Model\GatewayConfig;
 use Sylius\Component\Core\Model\Payment;
+use Sylius\Component\Core\Model\PaymentMethod;
 use Sylius\Component\Payment\PaymentTransitions;
 use Tests\Refberg\SyliusPayUPlugin\Support\PaymentStateMachine;
 use function sprintf;
@@ -68,15 +72,91 @@ final class PaymentStateApplierTest extends TestCase
         self::assertSame('COMPLETED', PaymentDetails::of($payment)->getOrderStatus('ORDER1'));
     }
 
-    public function test_pending_statuses_keep_the_payment_new(): void
+    public function test_new_order_keeps_the_payment_new(): void
     {
         $payment = self::payment(['ORDER1']);
 
-        foreach (['NEW', 'PENDING', 'WAITING_FOR_CONFIRMATION'] as $status) {
-            self::assertSame(PaymentStateApplier::RESULT_UNCHANGED, $this->applier->apply($payment, self::order('ORDER1', $status)));
-            self::assertSame('new', $payment->getState());
-        }
-        self::assertSame('WAITING_FOR_CONFIRMATION', PaymentDetails::of($payment)->getOrderStatus('ORDER1'));
+        self::assertSame(PaymentStateApplier::RESULT_UNCHANGED, $this->applier->apply($payment, self::order('ORDER1', 'NEW')));
+        self::assertSame('new', $payment->getState());
+        self::assertSame('NEW', PaymentDetails::of($payment)->getOrderStatus('ORDER1'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function inProgressStatuses(): iterable
+    {
+        yield 'pending' => ['PENDING'];
+        yield 'waiting for confirmation' => ['WAITING_FOR_CONFIRMATION'];
+    }
+
+    #[DataProvider('inProgressStatuses')]
+    public function test_order_in_progress_moves_the_payment_to_processing(string $status): void
+    {
+        $payment = self::payment(['ORDER1']);
+
+        self::assertSame(PaymentStateApplier::RESULT_PROCESSING, $this->applier->apply($payment, self::order('ORDER1', $status)));
+        self::assertSame('processing', $payment->getState());
+        self::assertSame($status, PaymentDetails::of($payment)->getOrderStatus('ORDER1'));
+    }
+
+    public function test_duplicated_in_progress_notification_changes_nothing(): void
+    {
+        $payment = self::payment(['ORDER1']);
+        $this->applier->apply($payment, self::order('ORDER1', 'PENDING'));
+
+        self::assertSame(PaymentStateApplier::RESULT_UNCHANGED, $this->applier->apply($payment, self::order('ORDER1', 'PENDING')));
+        self::assertSame(PaymentStateApplier::RESULT_UNCHANGED, $this->applier->apply($payment, self::order('ORDER1', 'WAITING_FOR_CONFIRMATION')));
+        self::assertSame('processing', $payment->getState());
+        self::assertSame([PaymentTransitions::TRANSITION_PROCESS], $this->stateMachine->appliedTransitions(PaymentTransitions::GRAPH));
+    }
+
+    public function test_order_in_progress_keeps_a_payment_switched_to_another_payment_method_new(): void
+    {
+        $applier = new PaymentStateApplier($this->stateMachine, credentialsResolver: new CredentialsResolver());
+        $payment = self::payment(['ORDER1']);
+        $payment->setMethod(self::method('BANK_TRANSFER', 'offline'));
+
+        self::assertSame(PaymentStateApplier::RESULT_UNCHANGED, $applier->apply($payment, self::order('ORDER1', 'PENDING')));
+        self::assertSame('new', $payment->getState());
+        self::assertSame('PENDING', PaymentDetails::of($payment)->getOrderStatus('ORDER1'));
+    }
+
+    public function test_order_in_progress_moves_a_switched_payment_to_processing_when_no_credentials_resolver_is_given(): void
+    {
+        $payment = self::payment(['ORDER1']);
+        $payment->setMethod(self::method('BANK_TRANSFER', 'offline'));
+
+        self::assertSame(PaymentStateApplier::RESULT_PROCESSING, $this->applier->apply($payment, self::order('ORDER1', 'PENDING')));
+        self::assertSame('processing', $payment->getState());
+    }
+
+    public function test_order_in_progress_moves_a_payment_that_still_uses_a_payu_method_to_processing(): void
+    {
+        $applier = new PaymentStateApplier($this->stateMachine, credentialsResolver: new CredentialsResolver());
+        $payment = self::payment(['ORDER1']);
+        $payment->setMethod(self::method('PAYU', PayUGateway::FACTORY_NAME));
+
+        self::assertSame(PaymentStateApplier::RESULT_PROCESSING, $applier->apply($payment, self::order('ORDER1', 'WAITING_FOR_CONFIRMATION')));
+        self::assertSame('processing', $payment->getState());
+    }
+
+    public function test_completed_order_completes_a_processing_payment(): void
+    {
+        $payment = self::payment(['ORDER1']);
+        $this->applier->apply($payment, self::order('ORDER1', 'PENDING'));
+
+        self::assertSame(PaymentStateApplier::RESULT_COMPLETED, $this->applier->apply($payment, self::order('ORDER1', 'COMPLETED')));
+        self::assertSame('completed', $payment->getState());
+    }
+
+    public function test_canceled_order_fails_a_processing_payment(): void
+    {
+        $payment = self::payment(['ORDER1']);
+        $this->applier->apply($payment, self::order('ORDER1', 'PENDING'));
+
+        self::assertSame(PaymentStateApplier::RESULT_FAILED, $this->applier->apply($payment, self::order('ORDER1', 'CANCELED')));
+        self::assertSame('failed', $payment->getState());
     }
 
     public function test_canceled_order_fails_the_payment_when_nothing_else_is_open(): void
@@ -84,6 +164,36 @@ final class PaymentStateApplierTest extends TestCase
         $payment = self::payment(['ORDER1']);
 
         self::assertSame(PaymentStateApplier::RESULT_FAILED, $this->applier->apply($payment, self::order('ORDER1', 'CANCELED')));
+        self::assertSame('failed', $payment->getState());
+    }
+
+    public function test_canceled_order_does_not_fail_a_payment_switched_to_another_payment_method(): void
+    {
+        $applier = new PaymentStateApplier($this->stateMachine, credentialsResolver: new CredentialsResolver());
+        $payment = self::payment(['ORDER1']);
+        $payment->setMethod(self::method('BANK_TRANSFER', 'offline'));
+
+        self::assertSame(PaymentStateApplier::RESULT_UNCHANGED, $applier->apply($payment, self::order('ORDER1', 'CANCELED')));
+        self::assertSame('new', $payment->getState());
+        self::assertSame('CANCELED', PaymentDetails::of($payment)->getOrderStatus('ORDER1'));
+    }
+
+    public function test_canceled_order_fails_a_switched_payment_when_no_credentials_resolver_is_given(): void
+    {
+        $payment = self::payment(['ORDER1']);
+        $payment->setMethod(self::method('BANK_TRANSFER', 'offline'));
+
+        self::assertSame(PaymentStateApplier::RESULT_FAILED, $this->applier->apply($payment, self::order('ORDER1', 'CANCELED')));
+        self::assertSame('failed', $payment->getState());
+    }
+
+    public function test_canceled_order_fails_a_payment_that_still_uses_a_payu_method(): void
+    {
+        $applier = new PaymentStateApplier($this->stateMachine, credentialsResolver: new CredentialsResolver());
+        $payment = self::payment(['ORDER1']);
+        $payment->setMethod(self::method('PAYU', PayUGateway::FACTORY_NAME));
+
+        self::assertSame(PaymentStateApplier::RESULT_FAILED, $applier->apply($payment, self::order('ORDER1', 'CANCELED')));
         self::assertSame('failed', $payment->getState());
     }
 
@@ -152,6 +262,18 @@ final class PaymentStateApplierTest extends TestCase
         $details->save();
 
         return $payment;
+    }
+
+    private static function method(string $code, string $factoryName): PaymentMethod
+    {
+        $gatewayConfig = new GatewayConfig();
+        $gatewayConfig->setFactoryName($factoryName);
+
+        $method = new PaymentMethod();
+        $method->setCode($code);
+        $method->setGatewayConfig($gatewayConfig);
+
+        return $method;
     }
 
     private static function order(string $orderId, string $status): PayUOrder

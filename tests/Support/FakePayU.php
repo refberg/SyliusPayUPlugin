@@ -317,11 +317,10 @@ final class FakePayU
             return self::json(404, ['status' => ['statusCode' => 'DATA_NOT_FOUND']]);
         }
 
-        if ('COMPLETED' === $this->orders[$orderId]['status']) {
-            return self::json(400, ['status' => ['statusCode' => 'ERROR_VALUE_INVALID', 'statusDesc' => 'Only orders which are not COMPLETED can be cancelled']]);
+        // The PayU sandbox answers 200 SUCCESS for a COMPLETED order too and leaves it COMPLETED.
+        if ('COMPLETED' !== $this->orders[$orderId]['status']) {
+            $this->orders[$orderId]['status'] = 'CANCELED';
         }
-
-        $this->orders[$orderId]['status'] = 'CANCELED';
 
         return self::json(200, ['orderId' => $orderId, 'extOrderId' => $this->orders[$orderId]['extOrderId'], 'status' => ['statusCode' => 'SUCCESS']]);
     }

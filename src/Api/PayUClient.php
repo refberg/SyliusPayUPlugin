@@ -108,7 +108,7 @@ final readonly class PayUClient implements PayUClientInterface
             throw $this->apiError('Canceling PayU order failed', $statusCode, $data);
         }
 
-        $this->logger->info('PayU order canceled.', ['payu_order_id' => $orderId]);
+        $this->logger->info('PayU accepted the order cancel request.', ['payu_order_id' => $orderId]);
     }
 
     public function createRefund(PayUCredentials $credentials, string $orderId, array $refund): RefundCreated

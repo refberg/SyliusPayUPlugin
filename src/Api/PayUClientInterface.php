@@ -26,6 +26,7 @@ interface PayUClientInterface
 
     /**
      * Cancels an order that is not COMPLETED (DELETE /api/v2_1/orders/{orderId}).
+     * No exception does not prove the order was canceled: PayU accepts the request for a COMPLETED order too.
      *
      * @throws PayUException
      */

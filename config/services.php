@@ -21,6 +21,7 @@ use Refberg\SyliusPayUPlugin\CommandHandler\StatusPaymentRequestHandler;
 use Refberg\SyliusPayUPlugin\CommandProvider\PaymentRequestCommandProvider;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolver;
 use Refberg\SyliusPayUPlugin\Config\CredentialsResolverInterface;
+use Refberg\SyliusPayUPlugin\EventListener\CaptureCancelledListener;
 use Refberg\SyliusPayUPlugin\EventListener\PaymentTransitionListener;
 use Refberg\SyliusPayUPlugin\Form\Type\PayUGatewayConfigurationType;
 use Refberg\SyliusPayUPlugin\Notification\NotificationParser;
@@ -84,7 +85,7 @@ return static function (ContainerConfigurator $container): void {
         ->args([service('doctrine.orm.entity_manager')]);
 
     $services->set(PaymentStateApplierInterface::class, PaymentStateApplier::class)
-        ->args([service('sylius_abstraction.state_machine'), service('logger')->ignoreOnInvalid()])
+        ->args([service('sylius_abstraction.state_machine'), service('logger')->ignoreOnInvalid(), service(CredentialsResolverInterface::class)])
         ->tag('monolog.logger', ['channel' => 'payu']);
 
     $services->set(PaymentSynchronizerInterface::class, PaymentSynchronizer::class)
@@ -159,6 +160,7 @@ return static function (ContainerConfigurator $container): void {
             service(PaymentLockerInterface::class),
             service('sylius_abstraction.state_machine'),
             service('logger')->ignoreOnInvalid(),
+            service('sylius.repository.payment_request'),
         ])
         ->tag('messenger.message_handler', ['bus' => 'sylius.payment_request.command_bus'])
         ->tag('monolog.logger', ['channel' => 'payu']);
@@ -171,6 +173,7 @@ return static function (ContainerConfigurator $container): void {
             service(PaymentLockerInterface::class),
             service('sylius_abstraction.state_machine'),
             service('logger')->ignoreOnInvalid(),
+            service('sylius.repository.payment_request'),
         ])
         ->tag('messenger.message_handler', ['bus' => 'sylius.payment_request.command_bus'])
         ->tag('monolog.logger', ['channel' => 'payu']);
@@ -237,4 +240,14 @@ return static function (ContainerConfigurator $container): void {
             ])
             ->tag('kernel.event_listener', ['event' => 'workflow.sylius_payment.completed.' . $transition]);
     }
+
+    // Payment method changes
+    $services->set('refberg_payu.listener.capture_cancelled', CaptureCancelledListener::class)
+        ->args([
+            service(CredentialsResolverInterface::class),
+            service(PayUClientInterface::class),
+            service('logger')->ignoreOnInvalid(),
+        ])
+        ->tag('kernel.event_listener', ['event' => 'workflow.sylius_payment_request.completed.cancel'])
+        ->tag('monolog.logger', ['channel' => 'payu']);
 };

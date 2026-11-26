@@ -158,6 +158,34 @@ abstract class IntegrationTestCase extends WebTestCase
     }
 
     /**
+     * Creates an offline payment method available in the payment's channel, persisted but not flushed.
+     */
+    protected function createBankTransferMethod(PaymentInterface $payment): PaymentMethodInterface
+    {
+        $gatewayConfig = $this->factory('gateway_config')->createNew();
+        self::assertInstanceOf(GatewayConfigInterface::class, $gatewayConfig);
+        $gatewayConfig->setFactoryName('offline');
+        $gatewayConfig->setGatewayName('offline');
+
+        $method = $this->factory('payment_method')->createNew();
+        self::assertInstanceOf(PaymentMethodInterface::class, $method);
+        $method->setCode('BANK_TRANSFER');
+        $method->setCurrentLocale('en_US');
+        $method->setFallbackLocale('en_US');
+        $method->setName('Bank transfer');
+        $method->setEnabled(true);
+        $method->setGatewayConfig($gatewayConfig);
+        $channel = $payment->getOrder()?->getChannel();
+        self::assertInstanceOf(ChannelInterface::class, $channel);
+        $method->addChannel($channel);
+
+        $this->em()->persist($gatewayConfig);
+        $this->em()->persist($method);
+
+        return $method;
+    }
+
+    /**
      * Creates and dispatches a payment request the same way the plugin's payment transition listener does.
      */
     protected function dispatchPaymentRequest(PaymentInterface $payment, string $action): void
