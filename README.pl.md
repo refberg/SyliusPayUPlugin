@@ -1,6 +1,7 @@
 # Sylius PayU Plugin
 
 [![Build](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/refberg/SyliusPayUPlugin/actions/workflows/build.yaml)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=refberg_SyliusPayUPlugin&metric=alert_status)](https://sonarcloud.io/summary/overall?id=refberg_SyliusPayUPlugin)
 [![Latest version](https://img.shields.io/packagist/v/refberg/sylius-payu-plugin)](https://packagist.org/packages/refberg/sylius-payu-plugin)
 [![Downloads](https://img.shields.io/packagist/dt/refberg/sylius-payu-plugin)](https://packagist.org/packages/refberg/sylius-payu-plugin)
 [![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4%20%7C%208.5-777bb4)](composer.json)
